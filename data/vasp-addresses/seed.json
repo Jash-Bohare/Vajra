@@ -57,8 +57,9 @@
   { "address": "0x18709E89B1D5F476d0Bcd2221b6D48F0A2B18E06", "exchangeName": "HTX", "chain": "ethereum", "source": "Etherscan Public Labels" },
 
   { "address": "0x0D0707963952f2fBA59dD06f2b425ace40b492Fe", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels (Gate.io 1)" },
-  { "address": "0x0D0707963952f2fBA59dD06f2b425ace40b492FA", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels (Gate.io 2)" },
-  { "address": "0x0c98fB66272027D326618774228c2e6462719B5c", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x7B8b6883F978640037a346D19a16fB34b7f8c928", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels (Gate.io 2)" },
+  { "address": "0x0c98fB66272027D326618774228c2e6462719B5c", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels (Gate.io 3)" },
+  { "address": "0x1C76a31D6133C2C1f54936B73859dF8b72528b12", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels (Gate.io Old Hot Wallet)" },
 
   { "address": "0x1e360E80053E78A03364fF216E2c045bAf2aC3A5", "exchangeName": "Bitstamp", "chain": "ethereum", "source": "Etherscan Public Labels" },
   { "address": "0x011b0e01764658B35919A3141F93a890D8eA85F2", "exchangeName": "Bitstamp", "chain": "ethereum", "source": "Etherscan Public Labels" },
