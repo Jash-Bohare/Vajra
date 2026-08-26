@@ -1,0 +1,9 @@
+{
+  "name": "@rt-cfas/vasp-addresses",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "echo VASP dataset ready",
+    "db:import": "node import-vasp.js"
+  }
+}

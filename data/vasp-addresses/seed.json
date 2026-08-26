@@ -1,0 +1,75 @@
+[
+  { "address": "0x28C6c06298d514Db089934071355E5743bf21d60", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x21a31Ee1afC51d94C2eFcCAa2092aD1028285549", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xDFd5293D8e347dFe59E90eFd55b2956a1343963d", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x56ED441315da3509391359D0A4722dC7DAF4715E", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xF977814e90dA44bFA03b6295A0616a897441aceC", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x3f5CE5FBFe3E9af3971dD833D26BA9b5C936f0bE", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xD551234Ae421e3BCBA99A0Da6d736074f22192FF", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x0D0707963952f2fBA59dD06f2b425ace40b492Fe", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x70FAA28A6B8d6829a4b1E649d26eC9a2a39ba413", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0x71660c4005BA85c37ccec55d0C4493E66Fe775d3", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x503B2103fE67f5E2720A124740751EE234916380", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xddfab69269989842d4071cc5c465b80e9a4701d5", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x3cD751E37A7210D743E230E2B859609315447051", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xb5d85CBf7cB3EE0156A32227667FBf5C778c68F1", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xEb2629a2734e272Bcc07BDA959863f316F4bD4Cf", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xA9D1e08C7793Af67e9d92fe308d5697FB81d3E43", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x71660C4005ba85c37cCEC55d0c4493e66Fe775D3", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x29D5527Cab78080059f6e75299616d00d8f1d14E", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x39755357759cE0d7f32dC8dC45414CCa409AE24e", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0x2910543Af39abA0Cd09d13349E10129804171E5E", "exchangeName": "Kraken", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x0A869d79a7052C7a1b55a8EbAbEa3420F0D1E138", "exchangeName": "Kraken", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xE853EC46854D534A0B7c92b45172703544491458", "exchangeName": "Kraken", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x05ee189a8c0167a824e3c3d691505c2a13f70761", "exchangeName": "Kraken", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xDA9dfA130Df4dE4673b89022EE50ff26f6EA73Cf", "exchangeName": "Kraken", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xfa52274DD61E1643d2205169732f29114BC240b3", "exchangeName": "Kraken", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x53d284357ec70cE289D6D64134DfAc8E511c8B3D", "exchangeName": "Kraken", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0x6cC5f688a315f3dC28A7781717a9A798a59fDA7b", "exchangeName": "OKX", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xA7EFae728d2936e78BDA97dc267687568dD593f3", "exchangeName": "OKX", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x5041Ed759Dd4aFc3a72b8192C143F72f47244021", "exchangeName": "OKX", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x12a975765A2066d7F3e39050d5F29b8c2F340D4e", "exchangeName": "OKX", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x98C7B8E67e0eC2522774C3dE39c991e2b4FfB951", "exchangeName": "OKX", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0xf89d7b9c379f5776d466a6742e6549a9a0e7f7b1", "exchangeName": "Bybit", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xEE5B5B9230F760e807395029D88406E98715878d", "exchangeName": "Bybit", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x1Db3439a222C519ab44bb1144fC28167b4Fa6EE6", "exchangeName": "Bybit", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xa79E67e201c948e5802140696b3b094710A0B070", "exchangeName": "Bybit", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0xD621F324541733700DA7328B47833a6bF9c19e64", "exchangeName": "WazirX", "chain": "ethereum", "source": "Etherscan Public Labels / India LEA Casebook" },
+  { "address": "0x14041b369D5b67B715C8a176dB2ed7FF780a473d", "exchangeName": "WazirX", "chain": "ethereum", "source": "Etherscan Public Labels / India LEA Casebook" },
+  { "address": "0x89D91eB75390F77884d5B9a96e95c1aD16568285", "exchangeName": "WazirX", "chain": "ethereum", "source": "Etherscan Public Labels / India LEA Casebook" },
+
+  { "address": "0x4b71E28aE3c4A0b217036B6904664d4E24523cEF", "exchangeName": "CoinDCX", "chain": "ethereum", "source": "Etherscan Public Labels / India LEA Casebook" },
+  { "address": "0x6d9006e8efae21287c95e1e0a2958319f075d45d", "exchangeName": "CoinDCX", "chain": "ethereum", "source": "Etherscan Public Labels / India LEA Casebook" },
+
+  { "address": "0x66f820a414680B52deea5A7a423ad704842D1d15", "exchangeName": "KuCoin", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x16463c0f641261060F45963E817c1C4efD9E9559", "exchangeName": "KuCoin", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xa1d8d970760f0016e10857d40eB6350ed8044CE7", "exchangeName": "KuCoin", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0x876EabF441B2EE5B5b0554Fd502a8E0600950cFA", "exchangeName": "Bitfinex", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x77134CbC06cB00b66F4c7e623D5fdBF6777635EC", "exchangeName": "Bitfinex", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x1151314c323b78c028E40a76985C1C2b6d05D5c3", "exchangeName": "Bitfinex", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0x6748F50f68682E4F5285E0DDe233420BC0115d7e", "exchangeName": "HTX", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x18709E89B1D5F476d0Bcd2221b6D48F0A2B18E06", "exchangeName": "HTX", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0x0D0707963952f2fBA59dD06f2b425ace40b492FA", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x0c98fB66272027D326618774228c2e6462719B5c", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0x1e360E80053E78A03364fF216E2c045bAf2aC3A5", "exchangeName": "Bitstamp", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x011b0e01764658B35919A3141F93a890D8eA85F2", "exchangeName": "Bitstamp", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0x6c6D923E6662d49A75d65de7665e04049bf8a78A", "exchangeName": "Gemini", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0xd24400ae8BfEB77c97D7676763497f648CCa4136", "exchangeName": "Gemini", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0x72A53cDB267E14C79393B9708f8b9E92d66141aF", "exchangeName": "Crypto.com", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x6262998Ced04146FA42253a5C0AF90CA02dfd2A3", "exchangeName": "Crypto.com", "chain": "ethereum", "source": "Etherscan Public Labels" },
+
+  { "address": "0x1111111254fb6c44bac0bed2854e76f90643097d", "exchangeName": "1inch Router (DeFi)", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", "exchangeName": "Uniswap Router (DeFi)", "chain": "ethereum", "source": "Etherscan Public Labels" }
+]
