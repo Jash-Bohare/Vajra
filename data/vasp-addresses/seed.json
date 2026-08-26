@@ -7,7 +7,6 @@
   { "address": "0xF977814e90dA44bFA03b6295A0616a897441aceC", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
   { "address": "0x3f5CE5FBFe3E9af3971dD833D26BA9b5C936f0bE", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
   { "address": "0xD551234Ae421e3BCBA99A0Da6d736074f22192FF", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
-  { "address": "0x0D0707963952f2fBA59dD06f2b425ace40b492Fe", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
   { "address": "0x70FAA28A6B8d6829a4b1E649d26eC9a2a39ba413", "exchangeName": "Binance", "chain": "ethereum", "source": "Etherscan Public Labels" },
 
   { "address": "0x71660c4005BA85c37ccec55d0C4493E66Fe775d3", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
@@ -17,7 +16,6 @@
   { "address": "0xb5d85CBf7cB3EE0156A32227667FBf5C778c68F1", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
   { "address": "0xEb2629a2734e272Bcc07BDA959863f316F4bD4Cf", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
   { "address": "0xA9D1e08C7793Af67e9d92fe308d5697FB81d3E43", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
-  { "address": "0x71660C4005ba85c37cCEC55d0c4493e66Fe775D3", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
   { "address": "0x29D5527Cab78080059f6e75299616d00d8f1d14E", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
   { "address": "0x39755357759cE0d7f32dC8dC45414CCa409AE24e", "exchangeName": "Coinbase", "chain": "ethereum", "source": "Etherscan Public Labels" },
 
@@ -58,7 +56,8 @@
   { "address": "0x6748F50f68682E4F5285E0DDe233420BC0115d7e", "exchangeName": "HTX", "chain": "ethereum", "source": "Etherscan Public Labels" },
   { "address": "0x18709E89B1D5F476d0Bcd2221b6D48F0A2B18E06", "exchangeName": "HTX", "chain": "ethereum", "source": "Etherscan Public Labels" },
 
-  { "address": "0x0D0707963952f2fBA59dD06f2b425ace40b492FA", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels" },
+  { "address": "0x0D0707963952f2fBA59dD06f2b425ace40b492Fe", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels (Gate.io 1)" },
+  { "address": "0x0D0707963952f2fBA59dD06f2b425ace40b492FA", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels (Gate.io 2)" },
   { "address": "0x0c98fB66272027D326618774228c2e6462719B5c", "exchangeName": "Gate.io", "chain": "ethereum", "source": "Etherscan Public Labels" },
 
   { "address": "0x1e360E80053E78A03364fF216E2c045bAf2aC3A5", "exchangeName": "Bitstamp", "chain": "ethereum", "source": "Etherscan Public Labels" },
@@ -70,6 +69,6 @@
   { "address": "0x72A53cDB267E14C79393B9708f8b9E92d66141aF", "exchangeName": "Crypto.com", "chain": "ethereum", "source": "Etherscan Public Labels" },
   { "address": "0x6262998Ced04146FA42253a5C0AF90CA02dfd2A3", "exchangeName": "Crypto.com", "chain": "ethereum", "source": "Etherscan Public Labels" },
 
-  { "address": "0x1111111254fb6c44bac0bed2854e76f90643097d", "exchangeName": "1inch Router (DeFi)", "chain": "ethereum", "source": "Etherscan Public Labels" },
-  { "address": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", "exchangeName": "Uniswap Router (DeFi)", "chain": "ethereum", "source": "Etherscan Public Labels" }
+  { "address": "0x1111111254fb6c44bac0bed2854e76f90643097d", "exchangeName": "1inch Router (DeFi Protocol)", "chain": "ethereum", "source": "Etherscan Public Labels / DEX Router" },
+  { "address": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", "exchangeName": "Uniswap Router (DeFi Protocol)", "chain": "ethereum", "source": "Etherscan Public Labels / DEX Router" }
 ]
