@@ -23,7 +23,7 @@ This repository is structured as a monorepo (Doc 03 Section 2 & Doc 06 Section 1
   /config           → Shared environment variable schemas (@rt-cfas/config)
 
 /data
-  /vasp-addresses   → Curated dataset (100+ verified exchange deposit addresses) + Postgres schema & import script
+  /vasp-addresses   → Curated dataset (60 verified exchange deposit addresses) + Postgres schema & import script
 
 /ml                 → v2 roadmap placeholder documentation
 
@@ -42,32 +42,34 @@ Ensure your machine has the following installed:
 
 ---
 
-## 🚀 Step-by-Step Local Setup Guide (Phase 1)
+## 🚀 Step-by-Step Local Setup Guide
 
 Follow these steps to get all three services running locally on your computer in under 15 minutes.
 
-### 1. Clone the Repository
+### 1. Clone the Repository & Switch to Working Branch
 ```bash
-git clone <repository-url>
+git clone git@github.com:Jash-Bohare/Vajra.git
 cd Vajra
 ```
 
 ### 2. Configure Environment Variables
-Copy the template `.env.example` to `apps/api/.env`:
+Copy `.env.example` to root `.env` and `apps/api/.env`:
 
 **Windows (PowerShell):**
 ```powershell
+Copy-Item .env.example .env
 Copy-Item .env.example apps/api/.env
 ```
 
 **macOS / Linux:**
 ```bash
+cp .env.example .env
 cp .env.example apps/api/.env
 ```
 
-Edit `apps/api/.env` if needed:
-- `ETHERSCAN_API_KEY`: Get a free key from [Etherscan.io](https://etherscan.io/myapikey) (any placeholder string works for Phase 1).
-- `DATABASE_URL`: Connection string for PostgreSQL (Supabase / Neon / Local Postgres).
+Ensure `.env` contains:
+- `DATABASE_URL`: Connection string for Supabase PostgreSQL.
+- `ETHERSCAN_API_KEY`: Etherscan API key for live on-chain queries.
 
 ### 3. Install Monorepo Node Dependencies
 At the root of the repository, run:
@@ -138,20 +140,36 @@ npm run dev:web
 
 ---
 
-## 🧪 Verification & Testing
+## 🧪 Testing Phase 2 (Blockchain Intelligence & Multi-Hop Tracing)
 
-### 1. Run Python Unit Tests
-Verify all 4 risk-scoring rules in `services/risk`:
-```bash
-cd services/risk
-.\.venv\Scripts\pytest tests/test_rules.py
+To test the automated greedy tracing engine, Etherscan V2 fetching, Python risk scoring, and Supabase persistence:
+
+### Method A: Browser UI Test (Recommended)
+1. Open **[http://localhost:5173](http://localhost:5173)** in your browser.
+2. In the **Suspect Wallet Address** input, paste one of the verified test addresses below:
+   - **Multi-Hop Uncataloged Wallet to Coinbase (2 Hops)**: `0x53ef6da5fc74cdef214367240b0d96c34231258d`
+   - **Multi-Hop Deposit to Binance (1-2 Hops)**: `0x6f2d8b347dbfa187d1313338e0ff0120ca26a829`
+   - **Binance Hot Wallet Withdrawal**: `0x28C6c06298d514Db089934071355E5743bf21d60`
+3. Click **Run Automated Investigation**.
+4. Observe the live UI results:
+   - **Risk Assessment**: `HIGH RISK`, `MEDIUM RISK`, or `LOW RISK` badge + reasoning.
+   - **VASP Attribution**: Exchange name match (e.g., `🎯 MATCHED VASP: Coinbase` / `Binance`).
+   - **On-Chain Hops Table**: Hop #, Sender, Recipient, Amount in ETH, Timestamp, and Etherscan Tx Link.
+
+### Method B: Terminal PowerShell API Test
+Run this in PowerShell to submit a live trace request directly to the API:
+
+```powershell
+$body = @{ walletAddress = "0x53ef6da5fc74cdef214367240b0d96c34231258d" } | ConvertTo-Json
+$res = Invoke-RestMethod -Uri "http://localhost:3001/api/investigations" -Method Post -ContentType "application/json" -Body $body
+$res
 ```
-*(Expected output: `4 passed in 0.17s`)*
 
-### 2. Verify Health Endpoints
-Open your browser or use curl to check:
-- **Express API**: `http://localhost:3001/health` → `{"status":"ok","service":"apps/api",...}`
-- **Risk Microservice**: `http://localhost:8000/health` → `{"status":"ok","service":"services/risk",...}`
+Then fetch the full investigation payload (hops, risk score, graph nodes & edges):
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3001/api/investigations/$($res.investigationId)" | ConvertTo-Json -Depth 5
+```
 
 ---
 
@@ -160,7 +178,7 @@ Open your browser or use curl to check:
 When connecting to Supabase / Neon / Local PostgreSQL:
 
 1. Run the DDL migration script in `data/vasp-addresses/schema.sql` against your database.
-2. Seed the 100+ verified exchange deposit addresses:
+2. Seed the verified exchange deposit addresses into PostgreSQL:
 ```bash
 npm run db:seed
 ```
