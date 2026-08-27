@@ -151,35 +151,42 @@ cd services/risk
 ```
 *(Expected output: `6 passed in 0.17s` covering Rapid Forwarding, Peeling Chain, DEX Router Whitelist, Burner Wallet, Unresolved Trail, and Low Risk baseline)*
 
-### 2. Run Automated Graph & TLFT Engine Unit Test Suite
+### 2. Run Multi-Branch Tree Tracer Engine Unit Test Suite (Phase E2)
+To run the BFS multi-branch graph traversal, fan-in taint accumulation, and circuit breaker unit tests:
+```bash
+node services/blockchain/dist/treeTracer.test.js
+```
+*(Expected output: `Fan-Out Multi-Branch Traversal` and `Fan-In Taint Accumulation ($9000 accumulated, isFanIn=true)` both PASSED)*
+
+### 3. Run Automated Graph & TLFT Engine Unit Test Suite
 To run the graph generator & victim reference assertion tests:
 ```bash
-node --test services/blockchain/dist/tracer.test.js
+node services/blockchain/dist/tracer.test.js
 ```
 *(Expected output: 5 passed tests verifying exchange-matched, inconclusive, zero-hop, multi-asset token, and TLFT decaying taint graph schemas)*
 
-### 3. Run Cold vs Warm Consistency Suite
+### 4. Run Cold vs Warm Consistency Suite
 To run the 100% deterministic consistency test across cold and warm cache runs:
 ```bash
 node data/test_consistency.js
 ```
 
-### 4. Browser UI Test (Full Investigator Journey)
+### 5. Browser UI Test (Full Investigator Journey)
 1. Open **[http://localhost:5173](http://localhost:5173)** in your browser.
 2. Click one of the quick-select preset test wallet buttons:
+   - **⌛ Fan-In Hourglass Splitting (USDT)**: `0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918` *(Phase E2)*
+   - **🌳 Multi-Branch Fan-Out Splitting (USDC)**: `0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6` *(Phase E2)*
    - **🟢 USDT Transfer Trail (999 USDT)**: `0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1`
-   - **🔗 Multi-Hop Layering Trail (USDC)**: `0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6`
    - **⚙️ DEX Routing Obfuscation (Uniswap)**: `0x2ea1a2b899dbc43f1c61c78a634817ef90ba1eca`
    - **🟣 Coinbase Trail (10.99 ETH)**: `0x53ef6da5fc74cdef214367240b0d96c34231258d`
    - **🟡 Binance Deposit Trail (0.05 ETH)**: `0x6f2d8b347dbfa187d1313338e0ff0120ca26a829`
 3. Notice **Step 1 Pre-Scan**: Automatically previews all outgoing currencies on-chain (`USDT`, `USDC`, `ETH`, `DAI`).
 4. Select target currency and click **Run Targeted Investigation**.
 5. View live results:
-   - **Cytoscape.js Graph Canvas**: Click nodes & edges to inspect multi-asset USD values & Etherscan links.
-   - **Risk Assessment Card**: Expand reasoning details to view rule explainability & score (0-100).
-   - **VASP Attribution**: Exchange name match (`🎯 MATCHED VASP: Coinbase` / `Binance`).
-   - **Traced On-Chain Hops Table**: Displays token badges, USD values, timestamps, and confidence levels (`HIGH` / `LOW`).
-   - **Download Legal PDF Report**: Click **"📄 Download Legal PDF Report"** to export an official PDF investigation report.
+   - **Multi-Branch Tree Topology**: Renders `BranchSummaryCard` displaying all independent branches, hop counts, terminal status badges, and taint share bars.
+   - **Cytoscape.js Tree Graph**: Layout toggle (`Tree Layout (BF)` vs `Horizontal DAG`), color-coded nodes (Root: Red, Exchange: Green, Fan-Out: Purple, Fan-In: Indigo), and taint % edge labels.
+   - **Explainable Risk Assessment**: Gated tree topology rules (`fan_in_aggregation`, `fan_out_splitting`, `multi_vasp_deposit`).
+   - **Download Legal PDF Report**: Click **"📄 Download Legal PDF Report"** to export an official PDF investigation report including Section 4 Multi-Branch Tree Topology Summary & Taint Statement.
 
 ---
 
@@ -204,4 +211,7 @@ For detailed architectural guidelines and rules, read the files in the [`/Specs`
 - [04 — Roadmap & Execution Plan](./Specs/04_Roadmap_Execution_Plan.md)
 - [05 — Architecture Decision Records](./Specs/05_Architecture_Decision_Records.md)
 - [06 — AI Development & Repo Specification](./Specs/06_AI_Development_Repository_Specification.md)
+- [07 — Enterprise Roadmap & Architecture](./Specs/07_Enterprise_Roadmap_and_Architecture.md)
 - [08 — Phase E1 Multi-Asset & Token Intelligence](./Specs/08_Phase_E1_Multi_Asset_Token_Intelligence.md)
+- [09 — Phase E2 Multi-Branch Tree Tracing Engine](./Specs/09_Phase_E2_Multi_Branch_Tree_Engine.md)
+- [10 — Phase E3 Advanced AI/ML Engine](./Specs/10_Phase_E3_Advanced_AI_ML_Engine.md)
