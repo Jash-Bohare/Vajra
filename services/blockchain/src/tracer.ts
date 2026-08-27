@@ -86,3 +86,56 @@ export async function traceWalletHops(
     hopDepthUsed: hops.length,
   };
 }
+
+/**
+ * Transforms raw trace hops into an InvestigationGraph object (Doc 03 Section 5 & Doc 04 Phase 3)
+ */
+export function buildInvestigationGraph(
+  startAddress: string,
+  hops: TraceHop[],
+  terminalType: TerminalType,
+  terminalExchange?: string
+) {
+  const rootAddr = checksumAddress(startAddress);
+  const nodes: { id: string; type: 'wallet' | 'exchange'; label?: string }[] = [];
+  const edges: { from: string; to: string; amountEth: number; txHash: string; timestamp: string }[] = [];
+  const nodeSet = new Set<string>();
+
+  // Add suspect root node
+  nodes.push({ id: rootAddr, type: 'wallet' });
+  nodeSet.add(rootAddr.toLowerCase());
+
+  for (let i = 0; i < hops.length; i++) {
+    const hop = hops[i];
+    const isTerminalHop = i === hops.length - 1;
+    const isExchangeNode = isTerminalHop && terminalType === 'exchange';
+
+    // Edge
+    edges.push({
+      from: hop.fromAddress,
+      to: hop.toAddress,
+      amountEth: hop.amountEth,
+      txHash: hop.txHash,
+      timestamp: hop.txTimestamp,
+    });
+
+    // Destination Node
+    if (!nodeSet.has(hop.toAddress.toLowerCase())) {
+      nodes.push({
+        id: hop.toAddress,
+        type: isExchangeNode ? 'exchange' : 'wallet',
+        label: isExchangeNode ? terminalExchange : undefined,
+      });
+      nodeSet.add(hop.toAddress.toLowerCase());
+    }
+  }
+
+  return {
+    nodes,
+    edges,
+    terminal: {
+      type: terminalType,
+      exchangeName: terminalExchange,
+    },
+  };
+}
