@@ -10,7 +10,7 @@ import {
   BranchTerminalType,
   HopConfidence,
 } from '@rt-cfas/types';
-import { EthereumProvider, NormalizedTx, checksumAddress } from './index';
+import { EthereumProvider, NormalizedTx, checksumAddress, VaspLookupFn } from './index';
 
 export const TREE_TRACER_CONFIG = {
   MAX_DEPTH: 5,
@@ -23,8 +23,6 @@ export const TREE_TRACER_CONFIG = {
   TAINT_TOLERANCE_LOWER: 0.70,
   TAINT_TOLERANCE_UPPER: 1.05,
 } as const;
-
-export type VaspLookupFn = (address: string) => string | undefined;
 
 export interface TreeQueueItem {
   address: string;
