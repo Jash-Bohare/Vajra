@@ -11,7 +11,7 @@ This repository is structured as a monorepo (Doc 03 Section 2 & Doc 06 Section 1
 
 ```
 /apps
-  /web              → React + Vite + TypeScript investigator UI (Port 5173)
+  /web              → React + Vite + TypeScript investigator UI + Cytoscape.js (Port 5173)
   /api              → Node.js + Express + TypeScript backend orchestrator (Port 3001)
 
 /services
@@ -140,7 +140,7 @@ npm run dev:web
 
 ---
 
-## 🧪 Testing Phase 2, 3 & 4 (Tracing, Graph, History & Risk Engine)
+## 🧪 Testing Phase 2, 3, 4 & 5 (Investigator Dashboard & PDF Export)
 
 ### 1. Run Python Risk Microservice Pytest Suite (5/5 Passing Tests)
 To run the Phase 4 risk scoring engine unit tests:
@@ -157,32 +157,17 @@ node services/blockchain/dist/tracer.test.js
 ```
 *(Expected output: 3 passed tests verifying exchange-matched, inconclusive, and zero-hop graph schemas)*
 
-### 3. Browser UI Test (Recommended)
+### 3. Browser UI Test (Full Investigator Journey)
 1. Open **[http://localhost:5173](http://localhost:5173)** in your browser.
-2. In the **Suspect Wallet Address** input, paste a verified test address:
+2. Click one of the preset test wallet buttons or enter an address:
    - **Multi-Hop Uncataloged Wallet to Coinbase (2 Hops)**: `0x53ef6da5fc74cdef214367240b0d96c34231258d`
    - **Multi-Hop Deposit to Binance (1 Hop)**: `0x6f2d8b347dbfa187d1313338e0ff0120ca26a829`
 3. Click **Run Automated Investigation** to view live results:
-   - **Risk Assessment**: `HIGH RISK` badge + reasoning.
+   - **Cytoscape.js Graph Canvas**: Click nodes to inspect addresses & Etherscan links.
+   - **Risk Assessment Card**: Expand reasoning details to view rule explainability & score (0-100).
    - **VASP Attribution**: Exchange name match (`🎯 MATCHED VASP: Coinbase` / `Binance`).
-   - **On-Chain Hops Table**: Hop #, Sender, Recipient, Amount in ETH, Timestamp, and Etherscan Tx Link.
+   - **Download Legal PDF Report**: Click **"📄 Download Legal PDF Report"** to export an official PDF investigation report.
 4. Click **Session History** in the top navigation bar to view all past investigations loaded live from PostgreSQL!
-
-### 4. Terminal Direct Risk Scoring API Test
-Run this in PowerShell to test the Python FastAPI risk scoring endpoint directly:
-
-```powershell
-$body = @{
-    traceHops = @(
-        @{ hopIndex = 1; fromAddress = "0x111"; toAddress = "0x222"; amountEth = 10.0; txHash = "0xabc1"; txTimestamp = "2026-08-25T10:00:00Z" },
-        @{ hopIndex = 2; fromAddress = "0x222"; toAddress = "0x333"; amountEth = 5.0; txHash = "0xabc2"; txTimestamp = "2026-08-25T15:00:00Z" }
-    )
-    terminalType = "exchange"
-    destinationWalletPriorTxCount = 10
-} | ConvertTo-Json -Depth 5
-
-Invoke-RestMethod -Uri "http://localhost:8000/risk/score" -Method Post -ContentType "application/json" -Body $body | ConvertTo-Json -Depth 5
-```
 
 ---
 
