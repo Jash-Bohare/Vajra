@@ -2,10 +2,10 @@ import { TraceHop } from '@rt-cfas/types';
 import { buildInvestigationGraph } from './index';
 
 /**
- * Phase 3 Automated Graph & Attribution Test Suite
+ * Phase 3 & Phase E1 Automated Graph & Attribution Test Suite
  */
 function runTests() {
-  console.log('🧪 Running Phase 3 Graph & Attribution Tests...\n');
+  console.log('🧪 Running Phase 3 & E1 Graph & Attribution Tests...\n');
 
   // Test Case 1: Exchange Matched Trace Graph
   const startWallet = '0x53ef6da5fc74cdef214367240b0d96c34231258d';
@@ -58,7 +58,47 @@ function runTests() {
   console.assert(zeroHopGraph.nodes[0].id === startWallet.toLowerCase(), `Expected root node id ${startWallet.toLowerCase()}, got ${zeroHopGraph.nodes[0].id}`);
   console.log('✅ Test 3 Passed!\n');
 
-  console.log('🎉 All Phase 3 Graph & Attribution Tests Passed Successfully!');
+  // Test Case 4: Phase E1 Multi-Asset Token Graph Structure
+  const usdtHops: TraceHop[] = [
+    {
+      hopIndex: 1,
+      fromAddress: '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1',
+      toAddress: '0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918',
+      amountEth: 0.0,
+      tokenSymbol: 'USDT',
+      tokenAmount: 100.0,
+      usdValue: 100.0,
+      txHash: '0x1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff',
+      txTimestamp: '2026-08-25T10:00:00.000Z',
+    },
+  ];
+
+  const tokenGraph = buildInvestigationGraph('0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1', usdtHops, 'inconclusive');
+
+  console.log('Test 4: Phase E1 Multi-Asset USDT Token Graph');
+  console.assert(tokenGraph.nodes.length === 2, `Expected 2 nodes, got ${tokenGraph.nodes.length}`);
+  console.assert(tokenGraph.edges[0].tokenSymbol === 'USDT', `Expected edge tokenSymbol USDT, got ${tokenGraph.edges[0].tokenSymbol}`);
+  console.assert(tokenGraph.assetsDetected?.includes('USDT'), `Expected assetsDetected to include USDT`);
+  console.log('✅ Test 4 Passed!\n');
+
+  // Test Case 5: TLFT Victim Reference & Decaying Taint Graph
+  const victimTxHash = '0x1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff';
+  const taintGraph = buildInvestigationGraph(
+    '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1',
+    usdtHops,
+    'inconclusive',
+    undefined,
+    'USDT',
+    victimTxHash,
+    100.0
+  );
+
+  console.log('Test 5: TLFT Victim Reference & Decaying Taint Graph');
+  console.assert(taintGraph.victimTxHash === victimTxHash, `Expected victimTxHash match`);
+  console.assert(taintGraph.victimAmountUsd === 100.0, `Expected victimAmountUsd 100.0, got ${taintGraph.victimAmountUsd}`);
+  console.log('✅ Test 5 Passed!\n');
+
+  console.log('🎉 All Phase 3, Phase E1 & TLFT Graph & Attribution Tests Passed Successfully!');
 }
 
 runTests();
