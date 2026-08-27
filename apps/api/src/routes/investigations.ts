@@ -6,10 +6,13 @@ import {
   InvestigationGraph,
   RiskScoreRequest,
   RiskScoreResponse,
+  ScanAssetsRequest,
+  ScanAssetsResponse,
 } from '@rt-cfas/types';
 import {
   EthereumProvider,
   traceWalletHops,
+  scanWalletAssets,
   buildInvestigationGraph,
   isValidEthereumAddress,
   checksumAddress,
@@ -28,17 +31,22 @@ export const investigationsRouter = Router();
 const config = getApiConfig();
 const ethereumProvider = new EthereumProvider(config.etherscanApiKey);
 
-// In-memory fallback cache for demo sessions when DB isn't running
+// In-memory fallback cache for demo sessions when DB isn't running or for rich multi-asset metadata
 const memoryStore = new Map<string, any>();
 
 /**
  * Call Python Risk Microservice (services/risk)
  */
-async function getRiskScore(hops: any[], terminalType: string): Promise<{ riskLevel: string; reason: string }> {
+async function getRiskScore(
+  hops: any[],
+  terminalType: string,
+  destinationWalletPriorTxCount?: number
+): Promise<RiskScoreResponse> {
   try {
     const payload: RiskScoreRequest = {
       traceHops: hops,
       terminalType: terminalType as any,
+      destinationWalletPriorTxCount: destinationWalletPriorTxCount || 0,
     };
 
     const res = await fetch(`${config.riskServiceUrl}/risk/score`, {
@@ -49,7 +57,7 @@ async function getRiskScore(hops: any[], terminalType: string): Promise<{ riskLe
 
     if (res.ok) {
       const data: RiskScoreResponse = await res.json();
-      return { riskLevel: data.riskLevel, reason: data.reason };
+      return data;
     }
   } catch (err: any) {
     console.warn('[API] Could not reach risk service:', err.message);
@@ -60,8 +68,40 @@ async function getRiskScore(hops: any[], terminalType: string): Promise<{ riskLe
 }
 
 /**
- * POST /api/investigations (Doc 03 Section 6 & Doc 04 Phase 2/3)
- * Traces a suspect wallet address end-to-end
+ * POST /api/investigations/scan-assets (Spec 08)
+ * Pre-scans a suspect wallet to detect available outgoing assets and volumes
+ */
+investigationsRouter.post(
+  '/scan-assets',
+  async (
+    req: Request<{}, {}, ScanAssetsRequest>,
+    res: Response<ScanAssetsResponse | { error: string }>
+  ) => {
+    try {
+      const { walletAddress } = req.body;
+
+      if (!walletAddress || !isValidEthereumAddress(walletAddress)) {
+        return res.status(400).json({ error: 'Invalid or missing Ethereum wallet address format.' });
+      }
+
+      const formattedAddr = checksumAddress(walletAddress);
+      console.log(`[API] Pre-scanning assets for wallet: ${formattedAddr}`);
+      const assets = await scanWalletAssets(formattedAddr, ethereumProvider);
+
+      return res.status(200).json({
+        walletAddress: formattedAddr,
+        assets,
+      });
+    } catch (err: any) {
+      console.error('[API] Scan assets error:', err.message);
+      return res.status(500).json({ error: 'Failed to scan wallet assets.' });
+    }
+  }
+);
+
+/**
+ * POST /api/investigations (Doc 03 Section 6 & Spec 08 + TLFT Architecture)
+ * Traces a suspect wallet address end-to-end with optional Victim Tx Reference and Decaying Taint Engine
  */
 investigationsRouter.post(
   '/',
@@ -70,7 +110,7 @@ investigationsRouter.post(
     res: Response<CreateInvestigationResponse | { error: string }>
   ) => {
     try {
-      const { walletAddress, sessionId } = req.body;
+      const { walletAddress, targetAsset, victimTxHash, sessionId } = req.body;
 
       if (!walletAddress || !isValidEthereumAddress(walletAddress)) {
         return res.status(400).json({ error: 'Invalid or missing Ethereum wallet address format.' });
@@ -87,12 +127,23 @@ investigationsRouter.post(
       const vaspMap = await getVaspAddressMap();
       const lookupFn = (addr: string) => vaspMap.get(addr.toLowerCase());
 
-      // 3. Execute Greedy Single-Path Tracing
-      console.log(`[API] Tracing suspect wallet: ${formattedAddr}`);
-      const traceResult = await traceWalletHops(formattedAddr, ethereumProvider, lookupFn, 5);
+      // 3. Execute Targeted Multi-Asset & Decaying Taint Tracing
+      console.log(`[API] Tracing suspect wallet: ${formattedAddr} (Target Asset: ${targetAsset || 'Auto'}, Victim Tx: ${victimTxHash || 'None'})`);
+      const traceResult = await traceWalletHops(
+        formattedAddr,
+        ethereumProvider,
+        lookupFn,
+        5,
+        targetAsset,
+        victimTxHash
+      );
 
       // 4. Compute Risk Score via Python Microservice
-      const risk = await getRiskScore(traceResult.hops, traceResult.terminalType);
+      const risk = await getRiskScore(
+        traceResult.hops,
+        traceResult.terminalType,
+        traceResult.destinationWalletPriorTxCount
+      );
 
       // 5. Persist to DB & Memory Store
       await saveTraceHopRecords(investigationId, traceResult.hops);
@@ -116,6 +167,13 @@ investigationsRouter.post(
         terminalExchange: traceResult.terminalExchange,
         riskLevel: risk.riskLevel,
         riskReason: risk.reason,
+        riskScore: risk.score,
+        riskIndicators: risk.indicators,
+        assetsDetected: traceResult.assetsDetected,
+        targetAsset: traceResult.targetAsset || targetAsset,
+        victimTxHash: traceResult.victimTxHash,
+        victimTxTimestamp: traceResult.victimTxTimestamp,
+        victimAmountUsd: traceResult.victimAmountUsd,
         hopDepthUsed: traceResult.hopDepthUsed,
         createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
@@ -134,28 +192,46 @@ investigationsRouter.post(
 );
 
 /**
- * GET /api/investigations/:id (Doc 03 Section 6 & Doc 04 Phase 3/5)
+ * GET /api/investigations/:id (Doc 03 Section 6 & Spec 08)
  * Returns investigation summary, hops, and InvestigationGraph payload
  */
 investigationsRouter.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  // 1. Check DB first, fallback to Memory Store
-  let record = await getInvestigationRecord(id);
-  if (!record) {
-    record = memoryStore.get(id);
-  }
+  // 1. Prefer Memory Store for rich multi-asset metadata, fallback to DB
+  let memRecord = memoryStore.get(id);
+  let dbRecord = await getInvestigationRecord(id);
+
+  let record = memRecord || dbRecord;
 
   if (!record) {
     return res.status(404).json({ error: 'Investigation not found.' });
   }
 
-  // 2. Build InvestigationGraph (Doc 03 Section 5 & Doc 04 Phase 3)
+  // If we have DB record and memRecord, merge rich hop details onto record
+  if (memRecord && dbRecord) {
+    record = {
+      ...dbRecord,
+      hops: memRecord.hops || dbRecord.hops,
+      assetsDetected: memRecord.assetsDetected,
+      targetAsset: memRecord.targetAsset,
+      victimTxHash: memRecord.victimTxHash,
+      victimTxTimestamp: memRecord.victimTxTimestamp,
+      victimAmountUsd: memRecord.victimAmountUsd,
+      riskScore: memRecord.riskScore || dbRecord.riskScore,
+      riskIndicators: memRecord.riskIndicators || dbRecord.riskIndicators,
+    };
+  }
+
+  // 2. Build InvestigationGraph (Doc 03 Section 5 & Spec 08)
   const graphPayload: InvestigationGraph = buildInvestigationGraph(
     record.walletAddress,
     record.hops || [],
     record.terminalType || 'inconclusive',
-    record.terminalExchange
+    record.terminalExchange,
+    record.targetAsset,
+    record.victimTxHash,
+    record.victimAmountUsd
   );
 
   return res.status(200).json({
@@ -168,6 +244,13 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
     terminalExchange: record.terminalExchange,
     riskLevel: record.riskLevel,
     riskReason: record.riskReason,
+    riskScore: record.riskScore,
+    riskIndicators: record.riskIndicators,
+    assetsDetected: record.assetsDetected || graphPayload.assetsDetected || ['ETH'],
+    targetAsset: record.targetAsset || graphPayload.targetAsset,
+    victimTxHash: record.victimTxHash,
+    victimTxTimestamp: record.victimTxTimestamp,
+    victimAmountUsd: record.victimAmountUsd,
     hopDepthUsed: record.hopDepthUsed,
     graph: graphPayload,
     hops: record.hops,
@@ -180,7 +263,7 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
  * GET /api/investigations/:id/report (Doc 03 Section 6)
  */
 investigationsRouter.get('/:id/report', (req: Request, res: Response) => {
-  return res.status(501).json({ error: 'Report generation will be implemented in Phase 5.' });
+  return res.status(501).json({ error: 'Report generation supported via PDF Exporter.' });
 });
 
 /**
