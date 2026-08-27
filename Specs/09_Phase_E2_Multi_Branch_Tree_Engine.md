@@ -300,6 +300,7 @@ export interface RiskScoreRequest {
 
   // Phase E2 additions
   traceTree?: TraceTree;            // Full tree (used when traceMode='tree')
+  victimTxHash?: string;            // ← REQUIRED for topology risk rules to fire (false-positive guard)
   isFanOutDetected?: boolean;
   isFanInDetected?: boolean;
   totalBranches?: number;
@@ -388,18 +389,41 @@ Algorithm:
       → Push all children to Queue with their proportional taint
 
    i. For each child node created:
-      → Check if child.address already exists in allNodes (from ANOTHER branch)
+      → Check if child.address already exists in visitedGlobal (from ANOTHER branch)
       → If yes: FAN-IN DETECTED
            → Mark child node as isFanInNode = true, increment fanInCount
-           → Do NOT re-queue (already being explored from another branch)
 
-   j. Check if child address is in VASP map:
+           ⚠️  [BUG 1 FIX] TAINT ACCUMULATION ON FAN-IN:
+           The existing node's taintedAmountUsd must be SUMMED with this new
+           converging branch's taint — not left at whatever the first-arriving
+           branch set it to. Whichever branch BFS processes second carries
+           real stolen funds; silently discarding its taint under-counts the
+           merged total and breaks all downstream calculations.
+
+           Correct implementation:
+             existingNode.taintedAmountUsd =
+               (existingNode.taintedAmountUsd ?? 0) + incomingBranchTaintUsd;
+             existingNode.taintPercentage =
+               (existingNode.taintedAmountUsd / victimAmountUsd) * 100;
+
+           → Do NOT re-queue (fan-in node was already queued by first branch)
+           → DO add the convergence edge so Cytoscape shows the arrow visually
+
+   j. [BUG 2 FIX] HARD CIRCUIT BREAKER — MAX_TOTAL_NODES:
+      → Before pushing ANY child to the queue, check:
+           if (visitedGlobal.size >= MAX_TOTAL_NODES) → stop exploring, mark current node as leaf
+      → Rationale: MAX_BRANCHES_PER_NODE=3 and MAX_DEPTH=5 gives 3^5=243 nodes
+        worst-case, not the ~15 assumed in Section 7. A bushy real wallet could
+        silently consume 729 API calls and hang the demo for minutes.
+      → MAX_TOTAL_NODES = 25 (set in TREE_TRACER_CONFIG, see Section 5)
+
+   k. Check if child address is in VASP map:
       → If yes: Mark as VASP terminal, create BranchSummary(terminalType='exchange')
                Do NOT push to queue (terminal reached)
-      → If no: Push to queue if depth < maxDepth
+      → If no: Push to queue if depth < maxDepth AND visitedGlobal.size < MAX_TOTAL_NODES
 
-   k. If node.depth == maxDepth:
-      → Mark as LEAF (max depth terminal)
+   l. If node.depth == maxDepth OR visitedGlobal.size >= MAX_TOTAL_NODES:
+      → Mark as LEAF (max depth / node cap terminal)
       → Create BranchSummary(terminalType='inconclusive')
 
 5. Compute aggregate stats:
@@ -429,23 +453,32 @@ for (const tx of selectedTxs) {
 - Wallet B carries: 60% taint = 6,000 USDT tainted
 - Wallet C carries: 40% taint = 4,000 USDT tainted
 
-#### 4.2.3 Fan-In Detection Logic
+#### 4.2.3 Fan-In Taint Accumulation Logic (Bug 1 Fix)
 
-Fan-in occurs when two or more independently traced branches send funds to the same wallet address. Because BFS explores nodes layer by layer, we detect this by checking if a child address already exists in the global `allNodes` set before adding it:
+Fan-in occurs when two or more independently traced branches send funds to the same wallet. The **critical requirement** is that the fan-in node's `taintedAmountUsd` is the **sum** of all converging branches — not the amount carried by whichever branch happened to arrive first in BFS order.
 
 ```typescript
 const childAddress = checksumAddress(selectedTx.toAddress);
+const incomingBranchTaintUsd = currentQueueItem.taintedAmountUsd *
+  ((selectedTx.usdValue ?? 0) / totalBranchValueUsd);
 
 if (visitedGlobal.has(childAddress.toLowerCase())) {
-  // FAN-IN DETECTED: This address is already in the tree (another branch visited it)
+  // FAN-IN DETECTED: accumulate taint from this converging branch
   const existingNode = allNodes.find(n => n.address.toLowerCase() === childAddress.toLowerCase());
   if (existingNode) {
     existingNode.isFanInNode = true;
     existingNode.fanInCount = (existingNode.fanInCount ?? 1) + 1;
+
+    // ✅ Correct: ADD this branch's taint to the existing accumulated total
+    existingNode.taintedAmountUsd = (existingNode.taintedAmountUsd ?? 0) + incomingBranchTaintUsd;
+    existingNode.taintPercentage = victimAmountUsd > 0
+      ? (existingNode.taintedAmountUsd / victimAmountUsd) * 100
+      : undefined;
   }
-  // Don't re-queue. But DO add the edge to show the convergence visually.
-  allEdges.push(newEdge);
-  continue; // Skip re-queuing
+  // Add convergence edge for visual display (Cytoscape shows the arrow)
+  allEdges.push(convergenceEdge);
+  // Do NOT re-queue — BFS will process it via the first-arriving branch
+  continue;
 }
 visitedGlobal.add(childAddress.toLowerCase());
 ```
@@ -466,13 +499,14 @@ Branch-level `visitedPerBranch` is maintained as a Set inherited from the parent
 The BFS tree tracer makes significantly more API calls than the linear tracer (up to `3 calls × nodeCount`). Rate-limit throttling:
 
 ```typescript
-// Between each wallet's 3-API fetch batch, wait 600ms
-// This ensures we stay well within Etherscan's 5 req/sec free tier
-// for a 5-depth tree with 3 branches per node (max ~15 nodes explored)
-await new Promise(resolve => setTimeout(resolve, 600));
+// Between each wallet's 3-API fetch batch, wait 750ms
+// Rationale: 3 parallel calls per node / 600ms = exactly 5 req/sec — the
+// Etherscan free-tier ceiling with zero margin. Network jitter or a slightly
+// slow timer fires a 429 mid-demo. 750ms gives a safe buffer below the ceiling.
+await new Promise(resolve => setTimeout(resolve, 750));
 ```
 
-The existing 10-minute in-memory cache in `EthereumProvider` prevents redundant re-fetches when the same wallet address appears in multiple branches.
+The existing 10-minute in-memory cache in `EthereumProvider` prevents redundant re-fetches when the same wallet address appears in multiple branches (critical for fan-in scenarios).
 
 ---
 
@@ -630,42 +664,56 @@ class RiskScoreRequest(BaseModel):
 
 #### 4.4.2 New Risk Rules (Phase E2)
 
-**Rule 1: Fan-Out Splitting (HIGH RISK)**
+> ⚠️ **[FALSE POSITIVE FIX]** Rules 1, 2, and 3 (fan-out, multi-VASP, fan-in) MUST
+> only fire when `victimTxHash` is present in the request — i.e., the trace is
+> **anchored to a confirmed reported crime**. Fan-out is structurally common in
+> legitimate activity: businesses paying multiple suppliers, DAOs distributing
+> treasury funds, DeFi yield strategies — all produce fan-out patterns on-chain.
+> Without a crime anchor, these structural observations carry zero fraud signal
+> and will false-positive on the first real wallet a judge tests.
+>
+> Implementation: Add `isVictimAnchored = bool(request.victimTxHash)` at the top
+> of the scoring function and gate all three topology rules behind it.
+
+**Rule 1: Fan-Out Splitting (HIGH RISK — victim-anchored only)**
 ```python
 # Fund splitting = deliberate layering to obfuscate tracing
-if request.isFanOutDetected and (request.totalBranches or 1) >= 2:
+# ONLY meaningful when trace is anchored to a known victim transaction
+if isVictimAnchored and request.isFanOutDetected and (request.totalBranches or 1) >= 2:
     score += 25
     indicators.append("fan_out_splitting")
-    reasons.append(f"Funds split across {request.totalBranches} branches — deliberate layering pattern.")
+    reasons.append(f"Funds split across {request.totalBranches} branches from a victim-reported transaction — deliberate layering pattern.")
 ```
 
-**Rule 2: Multi-VASP Deposit (HIGH RISK)**
+**Rule 2: Multi-VASP Deposit (HIGH RISK — victim-anchored only)**
 ```python
 # Money deposited into multiple exchanges = attempt to avoid exchange AML thresholds
-if (request.exchangeBranches or 0) >= 2:
+# ONLY meaningful when the split originated from a known victim transaction
+if isVictimAnchored and (request.exchangeBranches or 0) >= 2:
     score += 20
     indicators.append("multi_vasp_deposit")
-    reasons.append(f"{request.exchangeBranches} branches terminated at different exchanges.")
+    reasons.append(f"{request.exchangeBranches} branches from victim funds terminated at different exchanges.")
 ```
 
-**Rule 3: Fan-In Aggregation (HIGH RISK)**
+**Rule 3: Fan-In Aggregation (HIGH RISK — victim-anchored only)**
 ```python
 # Re-merging of split funds = hourglass obfuscation pattern
-if request.isFanInDetected:
+# ONLY suspicious when confirmed to originate from a victim transaction
+if isVictimAnchored and request.isFanInDetected:
     score += 20
     indicators.append("fan_in_aggregation")
-    reasons.append("Multiple split branches re-merged into a single wallet — hourglass obfuscation.")
+    reasons.append("Multiple split branches of victim funds re-merged into a single wallet — hourglass obfuscation.")
 ```
 
-**Rule 4: High Taint Coverage (Confirmatory — reduces uncertainty)**
+**Rule 4: High Taint Coverage (Confirmatory — no victim anchor required)**
 ```python
-# High taint coverage confirms the trace is accurate
+# High taint coverage confirms the trace is accurate regardless of anchor
 if (request.taintCoveragePercent or 0) >= 80:
     indicators.append("high_taint_coverage")
     reasons.append(f"{request.taintCoveragePercent:.1f}% of victim funds accounted for across all branches.")
 ```
 
-**Rule 5: Low Taint Coverage (Inconclusive warning)**
+**Rule 5: Low Taint Coverage (Inconclusive warning — no victim anchor required)**
 ```python
 # Low coverage means significant funds are unaccounted for
 if (request.taintCoveragePercent or 100) < 30:
@@ -815,13 +863,14 @@ Add tree-topology tags to the existing Investigation Summary card:
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 4.5.4 Updated PDF Legal Report (`PdfExporter.ts`)
+#### 4.5.4 Updated PDF Investigative Report (`PdfExporter.ts`)
 
 The PDF report gains:
 
 1. **Tree Topology Summary Section**: Table of all branches, their depth, terminal type, exchange name, and taint percentage.
 2. **Fan-Out Annotation**: Text block flagging when and where splitting occurred.
-3. **Taint Coverage Statement**: Legal-grade statement like *"94.5% ($9,450 USD) of the total victim loss of $10,000 USD has been traced and accounted for across 3 independent fund flow branches."*
+3. **Taint Coverage Investigative Summary Statement**: Wording such as *"94.5% ($9,450 USD) of the total reported victim loss of $10,000 USD has been traced and accounted for across 3 independent fund flow branches in this investigation."*
+   > Note: Use language appropriate to an investigative summary — not a legal certification. The report presents findings from on-chain data analysis; legal conclusions are drawn by the investigating officer.
 
 ---
 
@@ -833,10 +882,14 @@ All thresholds are defined as named constants in `treeTracer.ts` for easy config
 export const TREE_TRACER_CONFIG = {
   MAX_DEPTH: 5,                     // Maximum hop depth per branch
   MAX_BRANCHES_PER_NODE: 3,         // Maximum outgoing branches to follow per fan-out node
+  MAX_TOTAL_NODES: 25,              // [BUG 2 FIX] Hard circuit breaker: 3^5=243 worst-case without this.
+                                    // Caps total nodes explored regardless of depth/branch state.
+                                    // A bushy wallet would otherwise consume 729 API calls.
   SPLIT_THRESHOLD_PERCENT: 10,      // Minimum % of taint to consider a branch (ignore dust)
   MIN_USD_VALUE_THRESHOLD: 5,       // Minimum USD value of any tx to be considered ($5)
   MIN_ETH_VALUE_THRESHOLD: 0.0001,  // Minimum ETH value threshold
-  RATE_LIMIT_DELAY_MS: 600,         // Delay between wallet fetch batches (Etherscan API)
+  RATE_LIMIT_DELAY_MS: 750,         // [RATE LIMIT FIX] 600ms = exactly 5 req/sec ceiling with zero margin;
+                                    // 750ms provides safe buffer below Etherscan free-tier limit.
   TAINT_TOLERANCE_LOWER: 0.70,      // Lower bound for Tier 2 taint match (70%)
   TAINT_TOLERANCE_UPPER: 1.05,      // Upper bound for Tier 2 taint match (105%)
 } as const;
@@ -866,14 +919,26 @@ Tree Result:
   Taint Coverage: ~85%
 ```
 
-#### 6.2 Secondary Preset: Full Exchange Resolution (Both Branches Hit Exchanges)
+#### 6.2 Secondary Canonical Preset: Fan-In Hourglass (Locked Before Coding)
 
-To demonstrate the best-case scenario for LEA investigators where all branches lead to identifiable exchanges, we will identify a second canonical test wallet during Phase E2 execution using the same wallet discovery scripts from Phase E1 (`data/find_test_wallet.js`).
+> ⚠️ **[TBD FIX]** The secondary wallet MUST be identified and locked before Phase E2
+> execution begins — not deferred to "during execution". Deferring this was the same
+> mistake that cost a day in Phase E1. The `data/find_test_wallet.js` discovery script
+> must be run as the **first task** of Phase E2 execution day.
 
-**Required properties for secondary preset wallet:**
-- Must show ≥ 2 fan-out branches.
-- At least 1 branch must terminate at a known VASP (Coinbase, Binance, etc.).
-- Must not have > 20 outgoing transactions at the root (to keep Etherscan calls manageable).
+**Required properties for the secondary canonical wallet:**
+- Must demonstrate ≥ 2 fan-out branches originating from the root wallet.
+- At least 1 branch must terminate at a known VASP (Coinbase, Binance, etc.) within 5 hops.
+- Must have ≤ 20 outgoing transactions at root (keeps Etherscan calls predictable).
+- Must NOT be a known exchange hot wallet, bridge contract, or DEX router.
+
+**Discovery strategy:** Run the following before starting implementation:
+```bash
+# Scan candidate wallets from known active layering addresses found during E1
+node data/find_test_wallet.js --mode=fan-out --min-branches=2 --max-txs=20
+```
+
+**Lock the address here once found.** Until locked, the secondary preset button on `HomePage.tsx` is hidden (not shown as `TBD`).
 
 #### 6.3 Preset Quick-Select Update (`HomePage.tsx`)
 
@@ -885,9 +950,9 @@ const presetWallets = [
   { label: '🟣 Coinbase Trail (10.99 ETH)', address: '0x53ef6da5fc74cdef214367240b0d96c34231258d', asset: 'ETH' },
   { label: '🟡 Binance Deposit Trail (0.05 ETH)', address: '0x6f2d8b347dbfa187d1313338e0ff0120ca26a829', asset: 'ETH' },
 
-  // Phase E2 new presets
+  // Phase E2 presets (secondary address to be locked before coding)
   { label: '🌳 Multi-Branch Fan-Out (USDC Splitting)', address: '0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6', asset: 'USDC' },
-  { label: '⌛ Fan-In Hourglass (TBD in E2 execution)', address: 'TBD', asset: 'USDT' },
+  // Fan-In Hourglass preset: address locked once discovery script runs (see Section 6.2)
 ];
 ```
 
@@ -895,20 +960,22 @@ const presetWallets = [
 
 ### 7. Etherscan API Rate Limit & Caching Strategy
 
-Phase E2 makes more API calls than E1 due to multi-node traversal. Worst case analysis:
+Phase E2 makes more API calls than E1 due to multi-node traversal. Corrected worst-case analysis with `MAX_TOTAL_NODES=25` circuit breaker:
 
-| Scenario | Nodes Explored | API Calls (3/node) | With Cache Hits | Estimated Time |
-|----------|---------------|-------------------|-----------------|----------------|
+| Scenario | Max Nodes (Capped) | API Calls (3/node) | With Cache Hits | Est. Time @ 750ms/node |
+|----------|-------------------|-------------------|-----------------|------------------------|
 | 1 branch, depth 5 | 5 nodes | 15 calls | ~8 unique | ~6 seconds |
-| 2 branches, depth 3 | 7 nodes | 21 calls | ~14 unique | ~10 seconds |
-| 3 branches, depth 5 | 15 nodes | 45 calls | ~30 unique | ~22 seconds |
+| 2 branches, depth 3 | 7 nodes | 21 calls | ~12 unique | ~8 seconds |
+| 3 branches, max depth | **25 nodes (cap)** | 75 calls | ~40 unique | **~22 seconds max** |
+| Without cap (3^5) | ~~243 nodes~~ | ~~729 calls~~ | — | ~~demo-breaking~~ |
 
 **Mitigation Strategies:**
 
-1. **Existing 10-min TTL cache** — Wallets already fetched in one branch are served from cache in other branches. Critical for fan-in scenarios where the same wallet appears in multiple branches.
-2. **Parallel fetch within each node** — All 3 API calls per node (`getTransactions`, `getTokenTransactions`, `getInternalTransactions`) execute concurrently with `Promise.all`.
-3. **Sequential node processing** — Between node fetch batches, 600ms delay is inserted. BFS processes nodes in queue order (breadth first), ensuring rate-limit compliance.
-4. **Max Branches Limit** — `maxBranchesPerNode = 3` hard caps the maximum tree fan-out, preventing runaway API consumption.
+1. **`MAX_TOTAL_NODES = 25` hard circuit breaker** — BFS stops exploring new nodes once 25 are in the tree, regardless of depth or branch state. Bounds worst-case runtime to ~22 seconds.
+2. **Existing 10-min TTL cache** — Wallets already fetched in one branch are served from cache in other branches. Critical for fan-in scenarios where the same wallet appears in multiple branches.
+3. **Parallel fetch within each node** — All 3 API calls per node (`getTransactions`, `getTokenTransactions`, `getInternalTransactions`) execute concurrently with `Promise.all`.
+4. **Sequential node processing** — Between node fetch batches, 750ms delay is inserted (safe buffer below Etherscan free-tier ceiling).
+5. **Max Branches Limit** — `maxBranchesPerNode = 3` caps the maximum tree fan-out per node.
 
 ---
 
@@ -926,7 +993,7 @@ Phase E2 makes more API calls than E1 due to multi-node traversal. Worst case an
 | `apps/web/src/components/GraphVisualizer.tsx` | MODIFY | Add `breadthfirst` Cytoscape layout, fan-out/fan-in node styling, taint % edge labels, node collapse/expand |
 | `apps/web/src/components/BranchSummaryCard.tsx` | **NEW** | Per-branch taint summary table with taint percentage bar and branch highlighting |
 | `apps/web/src/pages/ResultsPage.tsx` | MODIFY | Add tree topology banner (fan-out/fan-in flags, taint coverage), render `BranchSummaryCard` |
-| `apps/web/src/utils/PdfExporter.ts` | MODIFY | Add Tree Topology Section, Fan-Out Annotation, Taint Coverage legal statement to PDF |
+| `apps/web/src/utils/PdfExporter.ts` | MODIFY | Add Tree Topology Section, Fan-Out Annotation, Taint Coverage investigative summary statement to PDF |
 | `apps/web/src/pages/HomePage.tsx` | MODIFY | Add Phase E2 canonical test wallet presets |
 
 ---
