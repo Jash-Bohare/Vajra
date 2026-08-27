@@ -15,7 +15,7 @@ This repository is structured as a monorepo (Doc 03 Section 2 & Doc 06 Section 1
   /api              → Node.js + Express + TypeScript backend orchestrator (Port 3001)
 
 /services
-  /blockchain       → In-process TypeScript library with ChainProvider interface (used by apps/api)
+  /blockchain       → In-process TypeScript library with ChainProvider interface & tracer (used by apps/api)
   /risk             → Python + FastAPI risk-scoring microservice (Port 8000)
 
 /packages
@@ -140,35 +140,31 @@ npm run dev:web
 
 ---
 
-## 🧪 Testing Phase 2 (Blockchain Intelligence & Multi-Hop Tracing)
+## 🧪 Testing Phase 2 & Phase 3 (Tracing, Graph & Session History)
 
-To test the automated greedy tracing engine, Etherscan V2 fetching, Python risk scoring, and Supabase persistence:
-
-### Method A: Browser UI Test (Recommended)
-1. Open **[http://localhost:5173](http://localhost:5173)** in your browser.
-2. In the **Suspect Wallet Address** input, paste one of the verified test addresses below:
-   - **Multi-Hop Uncataloged Wallet to Coinbase (2 Hops)**: `0x53ef6da5fc74cdef214367240b0d96c34231258d`
-   - **Multi-Hop Deposit to Binance (1-2 Hops)**: `0x6f2d8b347dbfa187d1313338e0ff0120ca26a829`
-   - **Binance Hot Wallet Withdrawal**: `0x28C6c06298d514Db089934071355E5743bf21d60`
-3. Click **Run Automated Investigation**.
-4. Observe the live UI results:
-   - **Risk Assessment**: `HIGH RISK`, `MEDIUM RISK`, or `LOW RISK` badge + reasoning.
-   - **VASP Attribution**: Exchange name match (e.g., `🎯 MATCHED VASP: Coinbase` / `Binance`).
-   - **On-Chain Hops Table**: Hop #, Sender, Recipient, Amount in ETH, Timestamp, and Etherscan Tx Link.
-
-### Method B: Terminal PowerShell API Test
-Run this in PowerShell to submit a live trace request directly to the API:
-
-```powershell
-$body = @{ walletAddress = "0x53ef6da5fc74cdef214367240b0d96c34231258d" } | ConvertTo-Json
-$res = Invoke-RestMethod -Uri "http://localhost:3001/api/investigations" -Method Post -ContentType "application/json" -Body $body
-$res
+### 1. Run Automated Graph Unit Test Suite
+To run the Phase 3 graph generator assertion tests:
+```bash
+node services/blockchain/dist/tracer.test.js
 ```
+*(Expected output: 3 passed tests verifying exchange-matched, inconclusive, and zero-hop graph schemas)*
 
-Then fetch the full investigation payload (hops, risk score, graph nodes & edges):
+### 2. Browser UI Test (Recommended)
+1. Open **[http://localhost:5173](http://localhost:5173)** in your browser.
+2. In the **Suspect Wallet Address** input, paste a verified test address:
+   - **Multi-Hop Uncataloged Wallet to Coinbase (2 Hops)**: `0x53ef6da5fc74cdef214367240b0d96c34231258d`
+   - **Multi-Hop Deposit to Binance (1 Hop)**: `0x6f2d8b347dbfa187d1313338e0ff0120ca26a829`
+3. Click **Run Automated Investigation** to view live results:
+   - **Risk Assessment**: `HIGH RISK` badge + reasoning.
+   - **VASP Attribution**: Exchange name match (`🎯 MATCHED VASP: Coinbase` / `Binance`).
+   - **On-Chain Hops Table**: Hop #, Sender, Recipient, Amount in ETH, Timestamp, and Etherscan Tx Link.
+4. Click **Session History** in the top navigation bar to view all past investigations loaded live from PostgreSQL!
+
+### 3. Terminal Session History API Test
+Run this in PowerShell to fetch session history directly from Supabase PostgreSQL:
 
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:3001/api/investigations/$($res.investigationId)" | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Uri "http://localhost:3001/api/investigations?sessionId=demo_session" | ConvertTo-Json -Depth 3
 ```
 
 ---
