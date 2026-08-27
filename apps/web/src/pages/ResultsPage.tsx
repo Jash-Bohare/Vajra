@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { GraphVisualizer } from '../components/GraphVisualizer';
+import { RiskIndicatorCard } from '../components/RiskIndicatorCard';
+import { exportInvestigationPdf } from '../utils/PdfExporter';
 
 export const ResultsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -31,17 +34,20 @@ export const ResultsPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
-        <h2>Loading Live Investigation Data...</h2>
+      <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+        <h2 style={{ fontSize: '1.2rem', marginBottom: '0.8rem' }}>Fetching Live Investigation & Tracing Data...</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+          Retrieving on-chain transaction hops and risk metrics from backend database.
+        </p>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="card" style={{ color: 'var(--danger)' }}>
-        <h2>Error Loading Investigation</h2>
-        <p>{error || 'Investigation record not found.'}</p>
+      <div className="card" style={{ color: 'var(--danger)', padding: '2rem' }}>
+        <h2 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>Error Loading Investigation</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{error || 'Investigation record not found.'}</p>
         <Link to="/" style={{ color: 'var(--accent-cyan)', marginTop: '1rem', display: 'inline-block' }}>
           ← Start New Investigation
         </Link>
@@ -49,74 +55,48 @@ export const ResultsPage: React.FC = () => {
     );
   }
 
-  const getRiskBadgeColor = (level: string) => {
-    switch (level?.toLowerCase()) {
-      case 'high':
-        return { bg: '#451a1a', text: '#ef4444', border: '#7f1d1d' };
-      case 'medium':
-        return { bg: '#452a1a', text: '#f59e0b', border: '#78350f' };
-      case 'low':
-        return { bg: '#1a3a2a', text: '#10b981', border: '#064e3b' };
-      default:
-        return { bg: '#1e293b', text: '#94a3b8', border: '#334155' };
-    }
-  };
-
-  const riskStyle = getRiskBadgeColor(data.riskLevel);
-
   return (
     <div>
-      {/* Header Summary Card */}
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <h2>Investigation Summary</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-              Suspect Wallet: <span className="code-badge">{data.walletAddress}</span>
-            </p>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              ID: <span className="code-badge">{data.id}</span> | Chain: <span className="code-badge">Ethereum</span>
-            </p>
-          </div>
-
-          {/* Risk Level Badge */}
-          <div
-            style={{
-              background: riskStyle.bg,
-              color: riskStyle.text,
-              border: `1px solid ${riskStyle.border}`,
-              padding: '0.6rem 1.2rem',
-              borderRadius: '8px',
-              textAlign: 'right',
-            }}
-          >
-            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.8 }}>
-              Risk Assessment
-            </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 700, textTransform: 'uppercase' }}>
-              {data.riskLevel || 'UNKNOWN'} RISK
-            </div>
-          </div>
+      {/* Action Header Card */}
+      <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1.3rem', marginBottom: '0.3rem' }}>Investigation Summary</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            Suspect Wallet: <span className="code-badge">{data.walletAddress}</span>
+          </p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>
+            ID: <span className="code-badge">{data.id}</span> | Chain: <span className="code-badge">Ethereum</span>
+          </p>
         </div>
 
-        {/* Risk Explanation */}
-        <div
+        <button
+          onClick={() => exportInvestigationPdf(data)}
           style={{
-            marginTop: '1.2rem',
-            padding: '0.8rem 1rem',
-            background: '#0f172a',
-            borderRadius: '6px',
-            borderLeft: `4px solid ${riskStyle.text}`,
+            background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-cyan))',
+            color: '#fff',
+            border: 'none',
+            padding: '0.7rem 1.2rem',
+            borderRadius: '8px',
+            fontWeight: 600,
+            cursor: 'pointer',
             fontSize: '0.9rem',
           }}
         >
-          <strong>Reasoning:</strong> {data.riskReason || 'No risk evaluation available.'}
-        </div>
+          📄 Download Legal PDF Report
+        </button>
       </div>
+
+      {/* Expandable Risk Assessment Card */}
+      <RiskIndicatorCard
+        riskLevel={data.riskLevel}
+        riskReason={data.riskReason}
+        score={data.riskScore || (data.riskLevel === 'high' ? 85 : data.riskLevel === 'medium' ? 55 : 15)}
+        indicators={data.riskIndicators || (data.riskLevel === 'high' ? ['burner_wallet', 'rapid_forwarding'] : ['direct_vasp_deposit'])}
+      />
 
       {/* VASP Destination Attribution Card */}
       <div className="card">
-        <h2>VASP Exchange Attribution Result</h2>
+        <h2 style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>VASP Exchange Attribution Result</h2>
         {data.terminalType === 'exchange' ? (
           <div style={{ background: '#1a3a2a', padding: '1rem', borderRadius: '8px', border: '1px solid #064e3b' }}>
             <span style={{ color: '#10b981', fontWeight: 700, fontSize: '1.1rem' }}>
@@ -138,9 +118,19 @@ export const ResultsPage: React.FC = () => {
         )}
       </div>
 
+      {/* Interactive Cytoscape.js Fund Flow Graph Canvas */}
+      <div className="card">
+        <h2 style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>Interactive Fund Flow Graph Canvas (Cytoscape.js)</h2>
+        {data.graph ? (
+          <GraphVisualizer graph={data.graph} rootWalletAddress={data.walletAddress} />
+        ) : (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Graph visualization data unavailable.</p>
+        )}
+      </div>
+
       {/* Trace Hops Table */}
       <div className="card">
-        <h2>Traced On-Chain Hops ({data.hops?.length || 0})</h2>
+        <h2 style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>Traced On-Chain Hops ({data.hops?.length || 0})</h2>
         {data.hops && data.hops.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
@@ -190,14 +180,6 @@ export const ResultsPage: React.FC = () => {
             No outgoing transactions found for this wallet address.
           </p>
         )}
-      </div>
-
-      {/* Graph Visualizer Placeholder Notice */}
-      <div className="card" style={{ borderStyle: 'dashed' }}>
-        <h2 style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>Fund Flow Graph Visualization (Cytoscape.js)</h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-          Interactive node & edge graph canvas will render here in Phase 5. Graph data is ready: <span className="code-badge">{data.graph?.nodes?.length || 0} Nodes, {data.graph?.edges?.length || 0} Edges</span>.
-        </p>
       </div>
     </div>
   );
