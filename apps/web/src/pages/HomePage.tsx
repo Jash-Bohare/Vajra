@@ -16,10 +16,11 @@ export const HomePage: React.FC = () => {
 
   const presetWallets: { label: string; address: string; asset: AssetType; victimTx?: string }[] = [
     { label: '🟢 USDT Transfer Trail (999 USDT)', address: '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1', asset: 'USDT' },
-    { label: '🔗 Multi-Hop Layering Trail (USDC)', address: '0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6', asset: 'USDC' },
     { label: '⚙️ DEX Routing Obfuscation (Uniswap)', address: '0x2ea1a2b899dbc43f1c61c78a634817ef90ba1eca', asset: 'ETH' },
     { label: '🟣 Coinbase Trail (10.99 ETH)', address: '0x53ef6da5fc74cdef214367240b0d96c34231258d', asset: 'ETH' },
     { label: '🟡 Binance Deposit Trail (0.05 ETH)', address: '0x6f2d8b347dbfa187d1313338e0ff0120ca26a829', asset: 'ETH' },
+    { label: '🌳 Multi-Branch Fan-Out (USDC)', address: '0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6', asset: 'USDC' },
+    { label: '⌛ Fan-In Hourglass Splitting (USDT)', address: '0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918', asset: 'USDT' },
   ];
 
   const handleScanAssets = async (addressToScan?: string) => {

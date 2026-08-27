@@ -74,10 +74,44 @@ export function exportInvestigationPdf(data: any) {
   doc.text(`Reasoning: ${data.riskReason || 'N/A'}`, 14, y);
   y += 14;
 
-  // 4. Traced Hops Table
+  // 4. Tree Topology Summary (Spec 09)
+  const tree = data.tree || data.graph?.tree;
+  if (tree && tree.branches && tree.branches.length > 0) {
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('4. Multi-Branch Tree Topology Summary', 14, y);
+    y += 8;
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Total Branches Traced: ${tree.totalBranches} | Exchange Endpoints Reached: ${tree.exchangeBranches}`, 14, y);
+    y += 5;
+    doc.text(`Taint Coverage: ${tree.taintCoveragePercent}% of reported victim funds traced`, 14, y);
+    y += 5;
+    doc.text(`Topology Flags: Fan-Out Splitting (${tree.totalFanOutNodes} nodes) | Fan-In Convergence (${tree.totalFanInNodes} nodes)`, 14, y);
+    y += 8;
+
+    // Taint Coverage Investigative Summary Statement
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(51, 65, 85);
+    const summaryStmt = `Investigative Summary Statement: ${tree.taintCoveragePercent}% ($${(tree.victimAmountUsd * (tree.taintCoveragePercent / 100)).toLocaleString()} USD) of the total reported victim loss of $${tree.victimAmountUsd.toLocaleString()} USD has been traced and accounted for across ${tree.totalBranches} independent fund flow branches in this investigation.`;
+    const splitLines = doc.splitTextToSize(summaryStmt, pageWidth - 28);
+    doc.text(splitLines, 14, y);
+    y += splitLines.length * 5 + 6;
+
+    doc.setTextColor(15, 23, 42);
+
+    if (y > 250) {
+      doc.addPage();
+      y = 20;
+    }
+  }
+
+  // 5. Traced Hops Table
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('4. Traced On-Chain Hops Table', 14, y);
+  doc.text('5. Traced On-Chain Hops Table', 14, y);
   y += 8;
 
   const hops = data.hops || [];
