@@ -23,12 +23,19 @@ export interface AssetSummary {
 }
 
 /**
- * Graph Visualization Schema (Doc 03 Section 5 & Spec 08)
+ * Graph Visualization Schema (Doc 03 Section 5 & Spec 08 & Spec 09)
  */
 export interface GraphNode {
   id: string; // wallet address (checksummed)
-  type: 'wallet' | 'exchange';
+  type: 'wallet' | 'exchange' | 'root';
   label?: string; // e.g. "Binance Hot Wallet 1"
+  isFanOut?: boolean; // True if node has >1 outgoing branch
+  isFanIn?: boolean;  // True if node receives from >1 branch
+  inDegree?: number;
+  outDegree?: number;
+  totalReceivedUsd?: number;
+  depth?: number;
+  taintedAmountUsd?: number;
 }
 
 export interface GraphEdge {
@@ -41,6 +48,7 @@ export interface GraphEdge {
   usdValue?: number;
   isInternalTx?: boolean;
   confidence?: HopConfidence;
+  taintPercentage?: number; // % of parent node taint carried by this branch
 }
 
 export interface InvestigationGraph {
@@ -54,6 +62,40 @@ export interface InvestigationGraph {
   targetAsset?: AssetType;
   victimTxHash?: string;
   victimAmountUsd?: number;
+  tree?: InvestigationTree; // Phase E2 multi-branch tree graph
+}
+
+/**
+ * Phase E2 Multi-Branch Tree Tracing Contracts (Spec 09)
+ */
+export type BranchTerminalType = 'exchange' | 'peeling_leaf' | 'dead_end' | 'max_depth_reached';
+
+export interface BranchSummary {
+  branchId: string;
+  hopCount: number;
+  terminalAddress: string;
+  terminalType: BranchTerminalType;
+  exchangeName?: string;
+  initialTaintedAmountUsd: number;
+  finalAmountUsd: number;
+  taintPercentage: number;
+  hops: TraceHop[];
+}
+
+export interface InvestigationTree {
+  rootAddress: string;
+  targetAsset: AssetType;
+  victimTxHash?: string;
+  victimAmountUsd?: number;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  branches: BranchSummary[];
+  totalBranches: number;
+  exchangeBranches: number;
+  taintCoveragePercent: number;
+  totalFanOutNodes: number;
+  totalFanInNodes: number;
+  isCapped?: boolean;
 }
 
 /**
