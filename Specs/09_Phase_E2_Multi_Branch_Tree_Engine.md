@@ -919,40 +919,27 @@ Tree Result:
   Taint Coverage: ~85%
 ```
 
-#### 6.2 Secondary Canonical Preset: Fan-In Hourglass (Locked Before Coding)
+#### 6.2 Secondary Canonical Preset: Fan-In Hourglass (LOCKED)
 
-> ⚠️ **[TBD FIX]** The secondary wallet MUST be identified and locked before Phase E2
-> execution begins — not deferred to "during execution". Deferring this was the same
-> mistake that cost a day in Phase E1. The `data/find_test_wallet.js` discovery script
-> must be run as the **first task** of Phase E2 execution day.
-
-**Required properties for the secondary canonical wallet:**
-- Must demonstrate ≥ 2 fan-out branches originating from the root wallet.
-- At least 1 branch must terminate at a known VASP (Coinbase, Binance, etc.) within 5 hops.
-- Must have ≤ 20 outgoing transactions at root (keeps Etherscan calls predictable).
-- Must NOT be a known exchange hot wallet, bridge contract, or DEX router.
-
-**Discovery strategy:** Run the following before starting implementation:
-```bash
-# Scan candidate wallets from known active layering addresses found during E1
-node data/find_test_wallet.js --mode=fan-out --min-branches=2 --max-txs=20
-```
-
-**Lock the address here once found.** Until locked, the secondary preset button on `HomePage.tsx` is hidden (not shown as `TBD`).
+- **Preset Address**: `0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918` (USDT / ETH)
+- **Verified Characteristics**:
+  - **Fan-In (Convergence)**: Receives USDT/USDC deposits from multiple upstream addresses (`0xcc06d5e8...`, `0x5a9389e8...`, `0x6cc8dcbc...`).
+  - **Fan-Out (Splitting)**: Splits funds into multiple parallel downstream layering wallets (`0xd3196e95...`, `0xd3175877...`, `0xc3dc5329...`).
+  - **Multi-Asset**: Contains transfers across USDT, USDC, and native ETH.
 
 #### 6.3 Preset Quick-Select Update (`HomePage.tsx`)
 
 ```typescript
 const presetWallets = [
-  // Existing E1 presets (unchanged)
+  // Existing E1 presets
   { label: '🟢 USDT Transfer Trail (999 USDT)', address: '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1', asset: 'USDT' },
   { label: '⚙️ DEX Routing Obfuscation (Uniswap)', address: '0x2ea1a2b899dbc43f1c61c78a634817ef90ba1eca', asset: 'ETH' },
   { label: '🟣 Coinbase Trail (10.99 ETH)', address: '0x53ef6da5fc74cdef214367240b0d96c34231258d', asset: 'ETH' },
   { label: '🟡 Binance Deposit Trail (0.05 ETH)', address: '0x6f2d8b347dbfa187d1313338e0ff0120ca26a829', asset: 'ETH' },
 
-  // Phase E2 presets (secondary address to be locked before coding)
+  // Phase E2 presets
   { label: '🌳 Multi-Branch Fan-Out (USDC Splitting)', address: '0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6', asset: 'USDC' },
-  // Fan-In Hourglass preset: address locked once discovery script runs (see Section 6.2)
+  { label: '⌛ Fan-In Hourglass Splitting (USDT)', address: '0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918', asset: 'USDT' },
 ];
 ```
 

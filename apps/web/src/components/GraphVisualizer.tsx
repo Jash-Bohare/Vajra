@@ -9,12 +9,14 @@ cytoscape.use(dagre);
 interface GraphVisualizerProps {
   graph: InvestigationGraph;
   rootWalletAddress?: string;
+  selectedBranchId?: string;
 }
 
 export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWalletAddress }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
-  const [selectedNode, setSelectedNode] = useState<{ id: string; type: string; label?: string } | null>(null);
+  const [selectedNode, setSelectedNode] = useState<{ id: string; type: string; label?: string; isFanOut?: boolean; isFanIn?: boolean } | null>(null);
+  const [layoutMode, setLayoutMode] = useState<'breadthfirst' | 'dagre'>('breadthfirst');
 
   useEffect(() => {
     if (!containerRef.current || !graph) return;
@@ -26,18 +28,25 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
     graph.nodes.forEach((node) => {
       const isRoot = rootWalletAddress && node.id.toLowerCase() === rootWalletAddress.toLowerCase();
       const isExchange = node.type === 'exchange';
+      const isFanOut = Boolean(node.isFanOut);
+      const isFanIn = Boolean(node.isFanIn);
 
       let labelText = node.label || `${node.id.substring(0, 6)}...${node.id.substring(38)}`;
       if (isRoot) labelText = `[ROOT] ${labelText}`;
+
+      let nodeType = isExchange ? 'exchange' : isRoot ? 'root' : isFanOut ? 'fanout' : isFanIn ? 'fanin' : 'wallet';
 
       cyElements.push({
         group: 'nodes',
         data: {
           id: node.id,
           label: labelText,
-          nodeType: isExchange ? 'exchange' : isRoot ? 'root' : 'wallet',
+          nodeType,
           exchangeName: node.label,
           fullAddress: node.id,
+          isFanOut,
+          isFanIn,
+          taintedAmountUsd: node.taintedAmountUsd,
         },
       });
     });
@@ -47,6 +56,9 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
       let edgeLabel = `${edge.amountEth} ETH`;
       if (edge.tokenSymbol && edge.tokenSymbol !== 'ETH') {
         edgeLabel = edge.usdValue ? `$${edge.usdValue.toLocaleString()} ${edge.tokenSymbol}` : `${edge.tokenSymbol}`;
+      }
+      if (edge.taintPercentage !== undefined) {
+        edgeLabel += ` (${edge.taintPercentage}%)`;
       }
 
       cyElements.push({
@@ -104,6 +116,26 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
           },
         },
         {
+          selector: 'node[nodeType = "fanout"]',
+          style: {
+            'background-color': '#3b0764',
+            'border-color': '#c084fc',
+            'border-width': 3,
+            width: 40,
+            height: 40,
+          },
+        },
+        {
+          selector: 'node[nodeType = "fanin"]',
+          style: {
+            'background-color': '#1e1b4b',
+            'border-color': '#818cf8',
+            'border-width': 3,
+            width: 40,
+            height: 40,
+          },
+        },
+        {
           selector: 'edge',
           style: {
             width: 2,
@@ -128,12 +160,20 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
           },
         },
       ],
-      layout: {
-        name: 'dagre',
-        rankDir: 'LR',
-        nodeSep: 60,
-        rankSep: 100,
-      } as any,
+      layout: (layoutMode === 'breadthfirst'
+        ? {
+            name: 'breadthfirst',
+            directed: true,
+            padding: 30,
+            spacingFactor: 1.25,
+            avoidOverlap: true,
+          }
+        : {
+            name: 'dagre',
+            rankDir: 'LR',
+            nodeSep: 60,
+            rankSep: 100,
+          }) as any,
     });
 
     // Handle node selection
@@ -143,6 +183,8 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
         id: node.data('fullAddress'),
         type: node.data('nodeType'),
         label: node.data('exchangeName'),
+        isFanOut: node.data('isFanOut'),
+        isFanIn: node.data('isFanIn'),
       });
     });
 
@@ -157,7 +199,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
     return () => {
       cy.destroy();
     };
-  }, [graph, rootWalletAddress]);
+  }, [graph, rootWalletAddress, layoutMode]);
 
   const handleFit = () => {
     if (cyRef.current) {
@@ -173,7 +215,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
         ref={containerRef}
         style={{
           width: '100%',
-          height: '380px',
+          height: '420px',
           background: '#090d16',
           borderRadius: '8px',
           border: '1px solid var(--border-color)',
@@ -182,6 +224,20 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
 
       {/* Control Buttons */}
       <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
+        <button
+          onClick={() => setLayoutMode(layoutMode === 'breadthfirst' ? 'dagre' : 'breadthfirst')}
+          style={{
+            background: '#1e293b',
+            color: '#f8fafc',
+            border: '1px solid #334155',
+            padding: '0.4rem 0.8rem',
+            borderRadius: '6px',
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+          }}
+        >
+          {layoutMode === 'breadthfirst' ? '🌳 Tree Layout (BF)' : '➡️ Horizontal DAG'}
+        </button>
         <button
           onClick={handleFit}
           style={{
@@ -196,6 +252,14 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
         >
           🔍 Recenter Graph
         </button>
+      </div>
+
+      {/* Node Legend */}
+      <div style={{ position: 'absolute', bottom: '10px', left: '10px', zIndex: 10, display: 'flex', gap: '0.6rem', fontSize: '0.75rem', background: '#0f172a', padding: '0.4rem 0.8rem', borderRadius: '6px', border: '1px solid #334155' }}>
+        <span>🔴 Root Wallet</span>
+        <span>🟢 Exchange</span>
+        <span>🟣 Fan-Out Splitting</span>
+        <span>🔵 Fan-In Convergence</span>
       </div>
 
       {/* Selected Node Details Drawer */}
@@ -230,12 +294,20 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
                     ? '#064e3b'
                     : selectedNode.type === 'root'
                     ? '#451a1a'
+                    : selectedNode.type === 'fanout'
+                    ? '#3b0764'
+                    : selectedNode.type === 'fanin'
+                    ? '#1e1b4b'
                     : '#0f172a',
                 color:
                   selectedNode.type === 'exchange'
                     ? '#10b981'
                     : selectedNode.type === 'root'
                     ? '#ef4444'
+                    : selectedNode.type === 'fanout'
+                    ? '#d8b4fe'
+                    : selectedNode.type === 'fanin'
+                    ? '#818cf8'
                     : '#38bdf8',
               }}
             >

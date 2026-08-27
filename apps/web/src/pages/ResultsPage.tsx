@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { GraphVisualizer } from '../components/GraphVisualizer';
 import { RiskIndicatorCard } from '../components/RiskIndicatorCard';
+import { BranchSummaryCard } from '../components/BranchSummaryCard';
 import { TokenBadge } from '../components/TokenBadge';
 import { exportInvestigationPdf } from '../utils/PdfExporter';
 
@@ -145,6 +146,11 @@ export const ResultsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Multi-Branch Tree Topology Card (Spec 09) */}
+      {(data.tree || data.graph?.tree) && (
+        <BranchSummaryCard tree={data.tree || data.graph?.tree} />
+      )}
 
       {/* Interactive Cytoscape.js Fund Flow Graph Canvas */}
       <div className="card">

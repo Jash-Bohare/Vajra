@@ -11,7 +11,7 @@ import {
 } from '@rt-cfas/types';
 import {
   EthereumProvider,
-  traceWalletHops,
+  traceWalletTree,
   scanWalletAssets,
   buildInvestigationGraph,
   isValidEthereumAddress,
@@ -40,13 +40,25 @@ const memoryStore = new Map<string, any>();
 async function getRiskScore(
   hops: any[],
   terminalType: string,
-  destinationWalletPriorTxCount?: number
+  destinationWalletPriorTxCount?: number,
+  treeData?: {
+    totalFanOutNodes: number;
+    totalFanInNodes: number;
+    totalBranches: number;
+    exchangeBranches: number;
+    victimTxHash?: string;
+  }
 ): Promise<RiskScoreResponse> {
   try {
-    const payload: RiskScoreRequest = {
+    const payload: any = {
       traceHops: hops,
       terminalType: terminalType as any,
       destinationWalletPriorTxCount: destinationWalletPriorTxCount || 0,
+      totalFanOutNodes: treeData?.totalFanOutNodes || 0,
+      totalFanInNodes: treeData?.totalFanInNodes || 0,
+      totalBranches: treeData?.totalBranches || 1,
+      exchangeBranches: treeData?.exchangeBranches || 0,
+      victimTxHash: treeData?.victimTxHash || null,
     };
 
     const res = await fetch(`${config.riskServiceUrl}/risk/score`, {
@@ -100,8 +112,8 @@ investigationsRouter.post(
 );
 
 /**
- * POST /api/investigations (Doc 03 Section 6 & Spec 08 + TLFT Architecture)
- * Traces a suspect wallet address end-to-end with optional Victim Tx Reference and Decaying Taint Engine
+ * POST /api/investigations (Doc 03 Section 6 & Spec 08 & Spec 09)
+ * Traces a suspect wallet address using Multi-Branch Tree Engine with Fan-Out/Fan-In Graph Traversal
  */
 investigationsRouter.post(
   '/',
@@ -110,7 +122,7 @@ investigationsRouter.post(
     res: Response<CreateInvestigationResponse | { error: string }>
   ) => {
     try {
-      const { walletAddress, targetAsset, victimTxHash, sessionId } = req.body;
+      const { walletAddress, targetAsset, victimTxHash, victimAmountUsd, sessionId } = req.body;
 
       if (!walletAddress || !isValidEthereumAddress(walletAddress)) {
         return res.status(400).json({ error: 'Invalid or missing Ethereum wallet address format.' });
@@ -127,34 +139,45 @@ investigationsRouter.post(
       const vaspMap = await getVaspAddressMap();
       const lookupFn = (addr: string) => vaspMap.get(addr.toLowerCase());
 
-      // 3. Execute Targeted Multi-Asset & Decaying Taint Tracing
-      console.log(`[API] Tracing suspect wallet: ${formattedAddr} (Target Asset: ${targetAsset || 'Auto'}, Victim Tx: ${victimTxHash || 'None'})`);
-      const traceResult = await traceWalletHops(
+      // 3. Execute Multi-Branch Tree Engine Tracing
+      console.log(`[API] Tree Tracing suspect wallet: ${formattedAddr} (Target Asset: ${targetAsset || 'Auto'}, Victim Tx: ${victimTxHash || 'None'})`);
+      const treeResult = await traceWalletTree(
         formattedAddr,
         ethereumProvider,
         lookupFn,
         5,
         targetAsset,
-        victimTxHash
+        victimTxHash,
+        victimAmountUsd
       );
 
-      // 4. Compute Risk Score via Python Microservice
+      // Extract primary branch hops for backwards compatibility
+      const primaryHops = treeResult.tree.branches.length > 0 ? treeResult.tree.branches[0].hops : [];
+
+      // 4. Compute Risk Score via Python Microservice with Tree Topology Metrics
       const risk = await getRiskScore(
-        traceResult.hops,
-        traceResult.terminalType,
-        traceResult.destinationWalletPriorTxCount
+        primaryHops,
+        treeResult.terminalType,
+        treeResult.destinationWalletPriorTxCount,
+        {
+          totalFanOutNodes: treeResult.tree.totalFanOutNodes,
+          totalFanInNodes: treeResult.tree.totalFanInNodes,
+          totalBranches: treeResult.tree.totalBranches,
+          exchangeBranches: treeResult.tree.exchangeBranches,
+          victimTxHash,
+        }
       );
 
       // 5. Persist to DB & Memory Store
-      await saveTraceHopRecords(investigationId, traceResult.hops);
+      await saveTraceHopRecords(investigationId, primaryHops);
       await updateInvestigationRecord(
         investigationId,
         'completed',
-        traceResult.terminalType,
-        traceResult.terminalExchange,
+        treeResult.terminalType,
+        treeResult.terminalExchange,
         risk.riskLevel,
         risk.reason,
-        traceResult.hopDepthUsed
+        treeResult.tree.branches[0]?.hopCount || 1
       );
 
       memoryStore.set(investigationId, {
@@ -163,21 +186,22 @@ investigationsRouter.post(
         walletAddress: formattedAddr,
         chain: 'ethereum',
         status: 'completed',
-        terminalType: traceResult.terminalType,
-        terminalExchange: traceResult.terminalExchange,
+        terminalType: treeResult.terminalType,
+        terminalExchange: treeResult.terminalExchange,
         riskLevel: risk.riskLevel,
         riskReason: risk.reason,
         riskScore: risk.score,
         riskIndicators: risk.indicators,
-        assetsDetected: traceResult.assetsDetected,
-        targetAsset: traceResult.targetAsset || targetAsset,
-        victimTxHash: traceResult.victimTxHash,
-        victimTxTimestamp: traceResult.victimTxTimestamp,
-        victimAmountUsd: traceResult.victimAmountUsd,
-        hopDepthUsed: traceResult.hopDepthUsed,
+        assetsDetected: treeResult.assetsDetected,
+        targetAsset: treeResult.tree.targetAsset || targetAsset,
+        victimTxHash: treeResult.tree.victimTxHash,
+        victimAmountUsd: treeResult.tree.victimAmountUsd,
+        hopDepthUsed: treeResult.tree.branches[0]?.hopCount || 1,
         createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
-        hops: traceResult.hops,
+        hops: primaryHops,
+        graph: treeResult.graph,
+        tree: treeResult.tree,
       });
 
       return res.status(201).json({
@@ -186,7 +210,7 @@ investigationsRouter.post(
       });
     } catch (err: any) {
       console.error('[API] Investigation error:', err.message);
-      return res.status(500).json({ error: 'Failed to complete wallet trace investigation.' });
+      return res.status(500).json({ error: 'Failed to complete wallet tree investigation.' });
     }
   }
 );
@@ -208,18 +232,21 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Investigation not found.' });
   }
 
-  // If we have DB record and memRecord, merge rich hop details onto record
+  // If we have DB record and memRecord, merge rich hop & tree details onto record
   if (memRecord && dbRecord) {
     record = {
       ...dbRecord,
+      ...memRecord,
       hops: memRecord.hops || dbRecord.hops,
-      assetsDetected: memRecord.assetsDetected,
-      targetAsset: memRecord.targetAsset,
-      victimTxHash: memRecord.victimTxHash,
-      victimTxTimestamp: memRecord.victimTxTimestamp,
-      victimAmountUsd: memRecord.victimAmountUsd,
+      assetsDetected: memRecord.assetsDetected || dbRecord.assetsDetected,
+      targetAsset: memRecord.targetAsset || dbRecord.targetAsset,
+      victimTxHash: memRecord.victimTxHash || dbRecord.victimTxHash,
+      victimTxTimestamp: memRecord.victimTxTimestamp || dbRecord.victimTxTimestamp,
+      victimAmountUsd: memRecord.victimAmountUsd || dbRecord.victimAmountUsd,
       riskScore: memRecord.riskScore || dbRecord.riskScore,
       riskIndicators: memRecord.riskIndicators || dbRecord.riskIndicators,
+      graph: memRecord.graph,
+      tree: memRecord.tree,
     };
   }
 
@@ -246,13 +273,14 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
     riskReason: record.riskReason,
     riskScore: record.riskScore,
     riskIndicators: record.riskIndicators,
-    assetsDetected: record.assetsDetected || graphPayload.assetsDetected || ['ETH'],
-    targetAsset: record.targetAsset || graphPayload.targetAsset,
+    assetsDetected: record.assetsDetected || record.graph?.assetsDetected || ['ETH'],
+    targetAsset: record.targetAsset || record.graph?.targetAsset,
     victimTxHash: record.victimTxHash,
     victimTxTimestamp: record.victimTxTimestamp,
     victimAmountUsd: record.victimAmountUsd,
     hopDepthUsed: record.hopDepthUsed,
-    graph: graphPayload,
+    graph: record.graph || graphPayload,
+    tree: record.tree || record.graph?.tree,
     hops: record.hops,
     createdAt: record.createdAt,
     completedAt: record.completedAt,

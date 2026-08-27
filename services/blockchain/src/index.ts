@@ -360,3 +360,4 @@ export class EthereumProvider implements ChainProvider {
 }
 
 export * from './tracer';
+export * from './treeTracer';

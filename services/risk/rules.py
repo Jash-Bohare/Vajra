@@ -52,6 +52,11 @@ class RiskScoreRequest(BaseModel):
     trace_hops: List[TraceHopInput] = Field(default=[], alias="traceHops")
     terminal_type: Literal["exchange", "inconclusive"] = Field("inconclusive", alias="terminalType")
     destination_wallet_prior_tx_count: int = Field(0, alias="destinationWalletPriorTxCount")
+    total_fan_out_nodes: int = Field(0, alias="totalFanOutNodes")
+    total_fan_in_nodes: int = Field(0, alias="totalFanInNodes")
+    total_branches: int = Field(1, alias="totalBranches")
+    exchange_branches: int = Field(0, alias="exchangeBranches")
+    victim_tx_hash: Optional[str] = Field(None, alias="victimTxHash")
 
 
 class RiskScoreResponse(BaseModel):
@@ -177,6 +182,45 @@ def score_unresolved_trail_rule(features: TraceFeatures) -> Optional[RiskScoreRe
     return None
 
 
+def score_fan_in_rule(request: RiskScoreRequest, features: TraceFeatures) -> Optional[RiskScoreResponse]:
+    """Topology Rule 1: High risk if fan-in node detected AND trace is anchored to a victimTxHash."""
+    if request.victim_tx_hash and request.total_fan_in_nodes > 0:
+        return RiskScoreResponse(
+            risk_level="high",
+            score=94.0,
+            indicators=["fan_in_aggregation", "hourglass_topology"],
+            reason="Funds split and re-converged at an intermediary wallet — hourglass layering pattern.",
+            features_used=features,
+        )
+    return None
+
+
+def score_fan_out_rule(request: RiskScoreRequest, features: TraceFeatures) -> Optional[RiskScoreResponse]:
+    """Topology Rule 2: High risk if fan-out node detected AND trace is anchored to a victimTxHash."""
+    if request.victim_tx_hash and request.total_fan_out_nodes > 0:
+        return RiskScoreResponse(
+            risk_level="high",
+            score=92.0,
+            indicators=["fan_out_splitting", "multi_branch_dispersion"],
+            reason="Fund flow splits into multiple parallel branches — deliberate dispersion pattern.",
+            features_used=features,
+        )
+    return None
+
+
+def score_multi_vasp_rule(request: RiskScoreRequest, features: TraceFeatures) -> Optional[RiskScoreResponse]:
+    """Topology Rule 3: High risk if 2+ distinct exchanges reached AND trace is anchored to a victimTxHash."""
+    if request.victim_tx_hash and request.exchange_branches >= 2:
+        return RiskScoreResponse(
+            risk_level="high",
+            score=89.0,
+            indicators=["multi_vasp_deposit", "multi_exchange_cashing_out"],
+            reason="Funds traced to 2+ distinct exchange endpoints — parallel cashing out pattern.",
+            features_used=features,
+        )
+    return None
+
+
 def score_risk(request: RiskScoreRequest) -> RiskScoreResponse:
     """Master rule engine evaluator executing independent rules in priority order."""
     features = extract_features(request)
@@ -186,22 +230,37 @@ def score_risk(request: RiskScoreRequest) -> RiskScoreResponse:
     if res:
         return res
 
-    # 1. Check Rule 1 (Rapid hops)
+    # 1. Check Topology Fan-In Rule (Highest priority tree rule, gated behind victimTxHash)
+    res = score_fan_in_rule(request, features)
+    if res:
+        return res
+
+    # 2. Check Topology Fan-Out Rule (Gated behind victimTxHash)
+    res = score_fan_out_rule(request, features)
+    if res:
+        return res
+
+    # 3. Check Multi-VASP Deposit Rule (Gated behind victimTxHash)
+    res = score_multi_vasp_rule(request, features)
+    if res:
+        return res
+
+    # 4. Check Rule 1 (Rapid hops)
     res = score_rapid_hops_rule(features)
     if res:
         return res
 
-    # 2. Check Rule 2 (Peeling chain)
+    # 5. Check Rule 2 (Peeling chain)
     res = score_peeling_chain_rule(features)
     if res:
         return res
 
-    # 3. Check Rule 3 (Burner wallet)
+    # 6. Check Rule 3 (Burner wallet)
     res = score_burner_wallet_rule(features)
     if res:
         return res
 
-    # 4. Check Rule 4 (Unresolved trail)
+    # 7. Check Rule 4 (Unresolved trail)
     res = score_unresolved_trail_rule(features)
     if res:
         return res
