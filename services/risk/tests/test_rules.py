@@ -39,11 +39,42 @@ def test_rapid_hops_rule_triggers_high_risk():
     res = score_risk(req)
 
     assert res.risk_level == "high"
+    assert res.score >= 80.0
+    assert "rapid_forwarding" in res.indicators
     assert "rapid movement pattern" in res.reason
 
 
+def test_peeling_chain_rule_triggers_high_risk():
+    """Rule 2: >20% ETH value drop between consecutive hops should trigger Peeling Chain High Risk."""
+    hops = [
+        TraceHopInput(
+            hopIndex=1,
+            fromAddress="0x111",
+            toAddress="0x222",
+            amountEth=10.0,
+            txHash="0xabc1",
+            txTimestamp="2026-08-25T10:00:00Z",
+        ),
+        TraceHopInput(
+            hopIndex=2,
+            fromAddress="0x222",
+            toAddress="0x333",
+            amountEth=5.0,
+            txHash="0xabc2",
+            txTimestamp="2026-08-25T15:00:00Z",
+        ),
+    ]
+
+    req = RiskScoreRequest(traceHops=hops, terminalType="exchange", destinationWalletPriorTxCount=10)
+    res = score_risk(req)
+
+    assert res.risk_level == "high"
+    assert "peeling_chain" in res.indicators
+    assert "peeling chain" in res.reason.lower()
+
+
 def test_burner_wallet_rule_triggers_high_risk():
-    """Rule 2: Zero prior transactions on destination wallet should yield High Risk."""
+    """Rule 3: Zero prior transactions on destination wallet should yield High Risk."""
     hops = [
         TraceHopInput(
             hopIndex=1,
@@ -59,11 +90,12 @@ def test_burner_wallet_rule_triggers_high_risk():
     res = score_risk(req)
 
     assert res.risk_level == "high"
+    assert "burner_wallet" in res.indicators
     assert "burner wallet" in res.reason.lower()
 
 
 def test_unresolved_trail_triggers_medium_risk():
-    """Rule 3: Multiple hops ending inconclusive should yield Medium Risk."""
+    """Rule 4: Multiple hops ending inconclusive should yield Medium Risk."""
     hops = [
         TraceHopInput(
             hopIndex=1,
@@ -87,6 +119,7 @@ def test_unresolved_trail_triggers_medium_risk():
     res = score_risk(req)
 
     assert res.risk_level == "medium"
+    assert "unresolved_trail" in res.indicators
     assert "no identified exchange endpoint" in res.reason
 
 
@@ -107,3 +140,5 @@ def test_normal_transfer_triggers_low_risk():
     res = score_risk(req)
 
     assert res.risk_level == "low"
+    assert res.score == 15.0
+    assert "direct_vasp_deposit" in res.indicators
