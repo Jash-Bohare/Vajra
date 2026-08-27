@@ -232,18 +232,21 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Investigation not found.' });
   }
 
-  // If we have DB record and memRecord, merge rich hop details onto record
+  // If we have DB record and memRecord, merge rich hop & tree details onto record
   if (memRecord && dbRecord) {
     record = {
       ...dbRecord,
+      ...memRecord,
       hops: memRecord.hops || dbRecord.hops,
-      assetsDetected: memRecord.assetsDetected,
-      targetAsset: memRecord.targetAsset,
-      victimTxHash: memRecord.victimTxHash,
-      victimTxTimestamp: memRecord.victimTxTimestamp,
-      victimAmountUsd: memRecord.victimAmountUsd,
+      assetsDetected: memRecord.assetsDetected || dbRecord.assetsDetected,
+      targetAsset: memRecord.targetAsset || dbRecord.targetAsset,
+      victimTxHash: memRecord.victimTxHash || dbRecord.victimTxHash,
+      victimTxTimestamp: memRecord.victimTxTimestamp || dbRecord.victimTxTimestamp,
+      victimAmountUsd: memRecord.victimAmountUsd || dbRecord.victimAmountUsd,
       riskScore: memRecord.riskScore || dbRecord.riskScore,
       riskIndicators: memRecord.riskIndicators || dbRecord.riskIndicators,
+      graph: memRecord.graph,
+      tree: memRecord.tree,
     };
   }
 
