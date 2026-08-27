@@ -1,11 +1,22 @@
 """
-Risk Scoring Rules Engine for RT-CFAS (Doc 03 Section 16)
+Risk Scoring Rules Engine for RT-CFAS & Vajra LEA Edition (Doc 03 Section 16 & Spec 08)
 Pure, independently testable Python functions.
 """
 
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Set
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
+
+# Known DEX router contracts (Spec 08 Bug Fix #1)
+KNOWN_DEX_ROUTERS: Set[str] = {
+    '0x7a250d5630b4cf539739df2c5dacb4c659f2488d',  # Uniswap V2 Router
+    '0xe592427a0aece92de3edee1f18e0157c05861564',  # Uniswap V3 Router
+    '0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45',  # Uniswap V3 Router 2
+    '0x1111111254fb6c44bac0bed2854e76f90643097d',  # 1inch V4 Router
+    '0x1111111254eeb25477b68fb85ed929f73a960582',  # 1inch V5 Router
+    '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f',  # SushiSwap Router
+    '0x03f7724180aa6b939894b5ca4314783b0b36b329',  # Shibaswap Router
+}
 
 
 class TraceHopInput(BaseModel):
@@ -17,6 +28,10 @@ class TraceHopInput(BaseModel):
     amount_eth: float = Field(..., alias="amountEth")
     tx_hash: str = Field(..., alias="txHash")
     tx_timestamp: str = Field(..., alias="txTimestamp")
+    token_symbol: Optional[str] = Field(None, alias="tokenSymbol")
+    token_amount: Optional[float] = Field(None, alias="tokenAmount")
+    usd_value: Optional[float] = Field(None, alias="usdValue")
+    is_internal_tx: Optional[bool] = Field(False, alias="isInternalTx")
 
 
 class TraceFeatures(BaseModel):
@@ -26,6 +41,7 @@ class TraceFeatures(BaseModel):
     min_time_between_hops_sec: float = Field(..., alias="minTimeBetweenHopsSec")
     max_time_between_hops_sec: float = Field(..., alias="maxTimeBetweenHopsSec")
     is_peeling_chain: bool = Field(False, alias="isPeelingChain")
+    is_dex_routed: bool = Field(False, alias="isDexRouted")
     terminal_type: Literal["exchange", "inconclusive"] = Field(..., alias="terminalType")
     destination_wallet_prior_tx_count: int = Field(0, alias="destinationWalletPriorTxCount")
 
@@ -49,10 +65,11 @@ class RiskScoreResponse(BaseModel):
 
 
 def extract_features(request: RiskScoreRequest) -> TraceFeatures:
-    """Computes feature vector from trace hops per Doc 03 Section 13."""
+    """Computes feature vector from trace hops per Doc 03 Section 13 & Spec 08."""
     hops = request.trace_hops
     hop_count = len(hops)
     is_peeling = False
+    is_dex = False
 
     if hop_count <= 1:
         min_time = 0.0
@@ -70,20 +87,42 @@ def extract_features(request: RiskScoreRequest) -> TraceFeatures:
         min_time = min(diffs) if diffs else 0.0
         max_time = max(diffs) if diffs else 0.0
 
-        # Check peeling chain pattern: significant ETH decrease (> 20%) between consecutive hops
+        # Check peeling chain pattern (using usdValue or amountEth)
         for i in range(1, len(hops)):
-            if hops[i].amount_eth < 0.8 * hops[i - 1].amount_eth:
+            prev_val = hops[i - 1].usd_value or hops[i - 1].amount_eth or 0.0
+            curr_val = hops[i].usd_value or hops[i].amount_eth or 0.0
+            if prev_val > 0 and curr_val < 0.8 * prev_val:
                 is_peeling = True
                 break
+
+    # Check DEX router whitelist (Spec 08 Bug Fix #1)
+    for h in hops:
+        if h.is_internal_tx and (h.to_address or "").lower() in KNOWN_DEX_ROUTERS:
+            is_dex = True
+            break
 
     return TraceFeatures(
         hop_count=hop_count,
         min_time_between_hops_sec=min_time,
         max_time_between_hops_sec=max_time,
         is_peeling_chain=is_peeling,
+        is_dex_routed=is_dex,
         terminal_type=request.terminal_type,
         destination_wallet_prior_tx_count=request.destination_wallet_prior_tx_count,
     )
+
+
+def score_dex_routing_rule(features: TraceFeatures) -> Optional[RiskScoreResponse]:
+    """Rule 0: High risk if internal tx routed through known DEX router (Spec 08 Bug Fix #1)."""
+    if features.is_dex_routed:
+        return RiskScoreResponse(
+            risk_level="high",
+            score=79.0,
+            indicators=["dex_routing", "contract_obfuscation"],
+            reason="Fund routed through known DEX aggregator/router contract — deliberate obfuscation pattern.",
+            features_used=features,
+        )
+    return None
 
 
 def score_rapid_hops_rule(features: TraceFeatures) -> Optional[RiskScoreResponse]:
@@ -141,6 +180,11 @@ def score_unresolved_trail_rule(features: TraceFeatures) -> Optional[RiskScoreRe
 def score_risk(request: RiskScoreRequest) -> RiskScoreResponse:
     """Master rule engine evaluator executing independent rules in priority order."""
     features = extract_features(request)
+
+    # 0. Check DEX Routing Rule (Whitelist only)
+    res = score_dex_routing_rule(features)
+    if res:
+        return res
 
     # 1. Check Rule 1 (Rapid hops)
     res = score_rapid_hops_rule(features)
