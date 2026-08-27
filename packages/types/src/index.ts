@@ -112,6 +112,8 @@ export interface CreateInvestigationResponse {
 
 export interface RiskScoreRequest {
   traceHops: TraceHop[];
+  terminalType?: TerminalType;
+  destinationWalletPriorTxCount?: number;
 }
 
 export interface RiskScoreResponse {
