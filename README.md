@@ -140,16 +140,24 @@ npm run dev:web
 
 ---
 
-## 🧪 Testing Phase 2 & Phase 3 (Tracing, Graph & Session History)
+## 🧪 Testing Phase 2, 3 & 4 (Tracing, Graph, History & Risk Engine)
 
-### 1. Run Automated Graph Unit Test Suite
+### 1. Run Python Risk Microservice Pytest Suite (5/5 Passing Tests)
+To run the Phase 4 risk scoring engine unit tests:
+```powershell
+cd services/risk
+.\.venv\Scripts\pytest tests/test_rules.py
+```
+*(Expected output: `5 passed in 0.19s` covering Rapid Forwarding, Peeling Chain, Burner Wallet, Unresolved Trail, and Low Risk baseline)*
+
+### 2. Run Automated Graph Unit Test Suite
 To run the Phase 3 graph generator assertion tests:
 ```bash
 node services/blockchain/dist/tracer.test.js
 ```
 *(Expected output: 3 passed tests verifying exchange-matched, inconclusive, and zero-hop graph schemas)*
 
-### 2. Browser UI Test (Recommended)
+### 3. Browser UI Test (Recommended)
 1. Open **[http://localhost:5173](http://localhost:5173)** in your browser.
 2. In the **Suspect Wallet Address** input, paste a verified test address:
    - **Multi-Hop Uncataloged Wallet to Coinbase (2 Hops)**: `0x53ef6da5fc74cdef214367240b0d96c34231258d`
@@ -160,11 +168,20 @@ node services/blockchain/dist/tracer.test.js
    - **On-Chain Hops Table**: Hop #, Sender, Recipient, Amount in ETH, Timestamp, and Etherscan Tx Link.
 4. Click **Session History** in the top navigation bar to view all past investigations loaded live from PostgreSQL!
 
-### 3. Terminal Session History API Test
-Run this in PowerShell to fetch session history directly from Supabase PostgreSQL:
+### 4. Terminal Direct Risk Scoring API Test
+Run this in PowerShell to test the Python FastAPI risk scoring endpoint directly:
 
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:3001/api/investigations?sessionId=demo_session" | ConvertTo-Json -Depth 3
+$body = @{
+    traceHops = @(
+        @{ hopIndex = 1; fromAddress = "0x111"; toAddress = "0x222"; amountEth = 10.0; txHash = "0xabc1"; txTimestamp = "2026-08-25T10:00:00Z" },
+        @{ hopIndex = 2; fromAddress = "0x222"; toAddress = "0x333"; amountEth = 5.0; txHash = "0xabc2"; txTimestamp = "2026-08-25T15:00:00Z" }
+    )
+    terminalType = "exchange"
+    destinationWalletPriorTxCount = 10
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod -Uri "http://localhost:8000/risk/score" -Method Post -ContentType "application/json" -Body $body | ConvertTo-Json -Depth 5
 ```
 
 ---
