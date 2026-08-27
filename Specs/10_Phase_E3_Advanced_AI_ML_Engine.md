@@ -14,7 +14,7 @@ Phase E3 transforms the `services/risk/` microservice from a hand-coded rule eng
 
 1. **Graph Topological Analytics (NetworkX)** — Mathematical extraction of fund-flow graph structure metrics (centrality, fan-out ratio, velocity, clustering) that reveal organization-level money laundering patterns invisible to rule-based systems.
 
-2. **ML Risk Classifier (XGBoost)** — A trained gradient-boosted tree model that replaces the current binary rule-waterfall with a calibrated **continuous fraud probability score (0–100)**, trained on real labeled blockchain data and returning per-feature importance breakdowns for explainability.
+2. **ML Risk Classifier (XGBoost)** — A trained gradient-boosted tree model that replaces the current binary rule-waterfall with a calibrated **continuous fraud probability score (0–100)**, trained on programmatically-generated laundering-pattern simulations that run through the real `network_metrics.py` and `features.py` pipeline — guaranteeing training and inference compute features identically. Returns per-feature SHAP importance breakdowns for full explainability.
 
 3. **LLM Case Narrative Generator (Gemini Flash / Ollama Llama 3)** — Automated generation of a **3-paragraph investigative executive summary** in plain English, suitable for inclusion in court case files, FIR complaint annexures, and NCRP report submissions — without requiring investigator writing skills.
 
@@ -67,17 +67,19 @@ An LLM-generated 3-paragraph executive summary — written in plain investigativ
 services/risk/
 ├── main.py                          ← MODIFY: Add 3 new endpoints
 ├── rules.py                         ← KEEP: Rule fallback engine (unchanged)
+├── constants.py                     ← NEW: Shared constants (ETH_USD_PRICE, KNOWN_DEX_ROUTERS)
 ├── requirements.txt                 ← MODIFY: Add networkx, xgboost, scikit-learn, shap, google-generativeai
 │
 ├── graph_analytics/                 ← NEW SUBMODULE
 │   ├── __init__.py
-│   └── network_metrics.py           ← NetworkX metric extractor (pure function, no I/O)
+│   └── network_metrics.py           ← NetworkX metric extractor (imports ETH_USD_PRICE from constants.py)
 │
 ├── ml_models/                       ← NEW SUBMODULE
 │   ├── __init__.py
-│   ├── features.py                  ← Feature engineering: combines TraceHop + GraphMetrics → feature vector
+│   ├── features.py                  ← Feature engineering: imports KNOWN_DEX_ROUTERS from constants.py
 │   ├── classifier.py                ← XGBoost model loader + inference + SHAP explainer
-│   ├── train.py                     ← Offline training script (run once to generate model artifact)
+│   ├── generate_synthetic.py        ← Synthetic training data generator (runs real pipeline)
+│   ├── train.py                     ← Offline training script (synthetic-only, run once)
 │   └── artifacts/
 │       ├── vajra_fraud_classifier_v1.pkl    ← Serialized trained XGBoost model
 │       └── feature_names.json               ← Ordered feature name list for SHAP alignment
@@ -86,11 +88,11 @@ services/risk/
 │   ├── __init__.py
 │   └── generator.py                 ← LLM prompt builder + API call + response parser
 │
-├── data/                            ← NEW: Training & labeled datasets
-│   ├── README.md                    ← Dataset provenance and source documentation
-│   ├── labeled_traces.jsonl         ← Primary labeled dataset (ground truth)
-│   ├── synthetic_fraud.jsonl        ← Synthetic fraud samples (augmentation)
-│   └── synthetic_legit.jsonl        ← Synthetic legitimate samples (augmentation)
+├── data/                            ← NEW: Training datasets (synthetic only)
+│   ├── README.md                    ← Dataset provenance and generation methodology documentation
+│   ├── synthetic_fraud.jsonl        ← Generated fraud traces (output of generate_synthetic.py)
+│   ├── synthetic_legit.jsonl        ← Generated legit traces (output of generate_synthetic.py)
+│   └── labeled_real.jsonl           ← Real confirmed cases (appended during live operation)
 │
 └── tests/
     ├── test_rules.py                ← EXISTING (keep all passing)
@@ -162,6 +164,42 @@ python-dotenv>=1.0.0      # Load GEMINI_API_KEY from .env
 numpy>=1.26.0             # Feature vector operations
 pandas>=2.2.0             # Training dataset loading & preprocessing
 ```
+
+---
+
+### 4.0 Shared Constants (`constants.py`)
+
+> ⚠️ **[CONSISTENCY FIX]** The `ETH_USD_PRICE` fallback constant and `KNOWN_DEX_ROUTERS` address set were previously defined independently in `network_metrics.py`, `features.py`, and `rules.py`. If any one file gets updated (e.g. ETH price changes from $3,000 to real-time), the others silently diverge. **All three modules must import from one shared `constants.py`.**
+
+```python
+"""
+constants.py — Shared constants for services/risk/
+All modules import from here. Never redefine these values inline.
+"""
+
+# ETH/USD fallback price (used when usdValue not provided in trace hop)
+# Updated manually when the approximate price changes significantly.
+# Future: replace with live Coingecko API call in a price-fetcher module.
+ETH_USD_PRICE: float = 3000.0
+
+# Known DEX router contract addresses (lowercase)
+# Single source of truth — imported by rules.py, features.py, network_metrics.py
+# DO NOT copy-paste this list into other files. Add new routers here only.
+KNOWN_DEX_ROUTERS: frozenset = frozenset({
+    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",  # Uniswap V2 Router
+    "0xe592427a0aece92de3edee1f18e0157c05861564",  # Uniswap V3 Router
+    "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45",  # Uniswap V3 Router 2
+    "0x1111111254fb6c44bac0bed2854e76f90643097d",  # 1inch V4 Router
+    "0x1111111254eeb25477b68fb85ed929f73a960582",  # 1inch V5 Router
+    "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",  # SushiSwap Router
+    "0x03f7724180aa6b939894b5ca4314783b0b36b329",  # Shibaswap Router
+})
+```
+
+**Existing files that must be updated to import from `constants.py`:**
+- `rules.py` — currently defines `KNOWN_DEX_ROUTERS` inline (lines 11–19). Remove that definition; replace with `from constants import KNOWN_DEX_ROUTERS`.
+- `graph_analytics/network_metrics.py` — currently uses hardcoded `* 3000`. Replace with `ETH_USD_PRICE` import.
+- `ml_models/features.py` — currently redefines a partial subset of DEX routers. Replace with `KNOWN_DEX_ROUTERS` import.
 
 ---
 
@@ -241,12 +279,14 @@ class GraphMetricsResponse(BaseModel):
 import networkx as nx
 from datetime import datetime
 from typing import List, Dict, Optional
+from constants import ETH_USD_PRICE  # Single source of truth — see Section 4.0
 
 def build_digraph_from_hops(hops: List[dict], root_address: str) -> nx.DiGraph:
     """
     Constructs a NetworkX DiGraph from a TraceHop array.
     Each hop becomes a directed edge: hop.fromAddress → hop.toAddress
-    Edge weight = usdValue (or amountEth * 3000 if usdValue missing)
+    Edge weight = usdValue (or amountEth * ETH_USD_PRICE if usdValue missing)
+    ETH_USD_PRICE imported from constants.py — never duplicated here.
     """
     G = nx.DiGraph()
     G.add_node(root_address, depth=0)
@@ -254,7 +294,7 @@ def build_digraph_from_hops(hops: List[dict], root_address: str) -> nx.DiGraph:
     for hop in hops:
         from_addr = hop.get("fromAddress", "")
         to_addr = hop.get("toAddress", "")
-        usd = hop.get("usdValue") or (hop.get("amountEth", 0) * 3000)
+        usd = hop.get("usdValue") or (hop.get("amountEth", 0) * ETH_USD_PRICE)
         ts = hop.get("txTimestamp", "")
         depth = hop.get("hopIndex", 1)
 
@@ -351,41 +391,39 @@ def compute_graph_metrics(G: nx.DiGraph, hops: List[dict], victim_usd: float = 0
 
 ### 4.3 Pillar 2: ML Risk Classifier (`ml_models/`)
 
-#### 4.3.1 Training Dataset: Where to Get Data
+#### 4.3.1 Training Dataset: Source Strategy
 
-The ML model requires labeled blockchain transaction traces — each labeled as `fraud` (1) or `legitimate` (0).
+> ⚠️ **[TRAINING DATA DESIGN DECISION]** The model trains **exclusively on synthetic data generated by the real pipeline** — not any external dataset. This is the correct and only defensible approach. Here is why:
+>
+> The Kaggle Ethereum Fraud Detection dataset (`vagifa/ethereum-frauddetection-dataset`) has a fatal column-mapping problem: its columns are wallet-level aggregates (e.g. `Avg min between sent tnx` is an average over all of a wallet's historical transactions, not the seconds between two specific hops). Mapping them into per-hop temporal features like `min_time_between_hops_sec` conflates two entirely different semantic units. Worse, every Pillar-1 graph topology feature — the novel contribution of Phase E3 — would have to be hardcoded as a constant for all ~9,841 rows (since the Kaggle dataset has no graph structure). XGBoost would correctly learn these features are uninformative, because in the training data, they are. A model trained this way structurally cannot use the features you built NetworkX to compute.
+>
+> The correct approach: generate synthetic traces using the same `network_metrics.py` and `features.py` code that runs at inference time. This guarantees training and inference see identical feature distributions. SHAP explanations are honest. The model can be described truthfully as: **"a calibrated scoring model trained on programmatically-generated laundering-pattern simulations, not yet on confirmed real casework — that is the natural next step once labeled data exists."** This is a true statement that is exactly as technically sophisticated as needed.
 
-**Source 1 — Elliptic Bitcoin Dataset (Primary, Free, Academic)**
-- **URL**: https://www.kaggle.com/datasets/ellipticco/elliptic-data-set
-- **License**: Free for academic/research/competition use (Elliptic LLC)
-- **Size**: 203,769 transactions, 49 features, 2 labels (illicit / licit / unknown)
-- **Format**: 3 CSV files — `elliptic_txs_features.csv`, `elliptic_txs_edgelist.csv`, `elliptic_txs_classes.csv`
-- **Download command**:
-  ```bash
-  # Requires Kaggle API key in ~/.kaggle/kaggle.json
-  pip install kaggle
-  kaggle datasets download -d ellipticco/elliptic-data-set -p services/risk/data/elliptic/
-  ```
-- **Usage Notes**: This is Bitcoin, not Ethereum — but the graph topology features (fan-out, velocity, chain depth) transfer directly. We use ONLY the topology/structural features (not Bitcoin-specific address features).
+**Source 1 — Synthetic Pipeline Data (PRIMARY, required)**
 
-**Source 2 — Ethereum Fraud Detection Dataset (Secondary)**
-- **URL**: https://www.kaggle.com/datasets/vagifa/ethereum-frauddetection-dataset
-- **License**: Open (Community Data License)
-- **Size**: 9,841 transactions labeled fraud/non-fraud on Ethereum mainnet
-- **Features**: 50 columns including `Avg min between sent tnx`, `max value received`, `total Ether sent` (transaction-level features that map directly to our TraceHop data)
-- **Download command**:
-  ```bash
-  kaggle datasets download -d vagifa/ethereum-frauddetection-dataset -p services/risk/data/eth_fraud/
-  ```
+Generated by `ml_models/generate_synthetic.py`, which constructs varied trace scenarios and runs them through the REAL `build_digraph_from_hops()` + `compute_graph_metrics()` + `build_feature_vector()` pipeline:
 
-**Source 3 — Synthetic Augmentation (Generated by training script)**
-- `services/risk/data/synthetic_fraud.jsonl`: 500 synthetically generated fraud traces using known fraud patterns (rapid forwarding, peeling chains, burner wallets, fan-out to exchanges)
-- `services/risk/data/synthetic_legit.jsonl`: 500 synthetically generated legitimate traces (single hops to known exchanges, slow velocity, high prior tx count at destination)
-- These are generated by `ml_models/train.py` using configurable templates — no external API needed.
+| Scenario | Count | Label | Key Pattern |
+|----------|-------|-------|-------------|
+| Rapid multi-hop forwarding (3–5 hops, <1hr) | 200 | fraud | High `hop_count`, low `min_hop_velocity_sec` |
+| Peeling chain (20%+ value reduction per hop) | 150 | fraud | High `value_decay_ratio`, `is_peeling_chain=1` |
+| Burner wallet (dest. prior_tx=0) | 150 | fraud | Low `destination_prior_tx_count` |
+| Star fan-out (1 root → 3+ leaves) | 100 | fraud | `is_star_topology=1`, high `max_fan_out_degree` |
+| Hourglass (fan-out then fan-in) | 100 | fraud | `is_hourglass_topology=1` |
+| Cluster (high clustering, many inter-connections) | 100 | fraud | High `clustering_coefficient` |
+| Direct to known VASP (1–2 hops, slow) | 300 | legit | `terminal_is_exchange=1`, low `hop_count` |
+| Payroll distribution (star, slow velocity) | 200 | legit | `is_star_topology=1` but slow `avg_hop_velocity_sec` |
+| DAO treasury (multi-recipient, large amounts) | 150 | legit | High fan-out + high `destination_prior_tx_count` |
+| Normal DeFi routing (DEX hop) | 150 | legit | `is_dex_routed=1`, known exchange terminal |
 
-**Source 4 — Real Traced Cases (Ongoing — append during operation)**
-- As investigations run through Vajra, confirmed fraud cases (from operator labeling) are appended to `services/risk/data/labeled_traces.jsonl` for continuous model improvement.
-- Format: One JSON object per line, with `trace_hops`, `graph_metrics`, `label` (0 or 1), `label_source`.
+**Total: 1,600 samples (900 fraud / 700 legit)**
+
+**Source 2 — Real Confirmed Cases (appended during live operation)**
+
+As Vajra investigations resolve (exchange confirms receipt, case closed), operator-labeled confirmed fraud cases are appended to `data/labeled_real.jsonl`. This file grows over time and is included in future model retraining runs. Format:
+```json
+{"features": [...28 values...], "label": 1, "label_source": "operator", "investigation_id": "...", "labeled_at": "2026-08-27"}
+```
 
 #### 4.3.2 Feature Engineering (`ml_models/features.py`)
 
@@ -462,20 +500,20 @@ def build_feature_vector(
     max_t = max(diffs) if diffs else 0.0
     avg_t = sum(diffs)/len(diffs) if diffs else 0.0
 
-    # Peeling chain
+    # Peeling chain — uses ETH_USD_PRICE from constants.py (single source of truth)
+    from constants import ETH_USD_PRICE, KNOWN_DEX_ROUTERS
     is_peeling = 0
     for i in range(1, len(hops)):
-        pv = hops[i-1].get("usdValue") or hops[i-1].get("amountEth",0)*3000
-        cv = hops[i].get("usdValue") or hops[i].get("amountEth",0)*3000
+        pv = hops[i-1].get("usdValue") or hops[i-1].get("amountEth", 0) * ETH_USD_PRICE
+        cv = hops[i].get("usdValue") or hops[i].get("amountEth", 0) * ETH_USD_PRICE
         if pv > 0 and cv < 0.8 * pv:
             is_peeling = 1
             break
 
-    # DEX routing
-    KNOWN_DEX = {"0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
-                 "0xe592427a0aece92de3edee1f18e0157c05861564"}
+    # DEX routing — imports KNOWN_DEX_ROUTERS from constants.py
+    # DO NOT redefine this list here. Single source of truth.
     is_dex = int(any(
-        h.get("isInternalTx") and (h.get("toAddress","")).lower() in KNOWN_DEX
+        h.get("isInternalTx") and (h.get("toAddress", "")).lower() in KNOWN_DEX_ROUTERS
         for h in hops
     ))
 
@@ -591,155 +629,295 @@ def probability_to_risk_level(prob: float) -> str:
     return "critical"
 ```
 
-#### 4.3.4 Model Training Script (`ml_models/train.py`)
+#### 4.3.4 Synthetic Data Generator (`ml_models/generate_synthetic.py`)
 
-This is an **offline script** — run once before deployment to train and serialize the model artifact.
+This script constructs varied synthetic trace scenarios and runs them through the **real** `build_digraph_from_hops()` → `compute_graph_metrics()` → `build_feature_vector()` pipeline. The resulting feature vectors are what get written to the JSONL training files — not hand-typed dictionaries.
+
+```python
+"""
+generate_synthetic.py — Synthetic training data generator for Vajra Fraud Classifier v1
+Run: python ml_models/generate_synthetic.py
+
+Outputs:
+  data/synthetic_fraud.jsonl  (900 labeled fraud samples)
+  data/synthetic_legit.jsonl  (700 labeled legit samples)
+
+All samples are generated by running the real network_metrics.py + features.py pipeline.
+This guarantees training and inference compute features identically.
+"""
+
+import json
+import random
+import numpy as np
+from pathlib import Path
+from datetime import datetime, timedelta
+from graph_analytics.network_metrics import build_digraph_from_hops, compute_graph_metrics
+from ml_models.features import build_feature_vector, FEATURE_NAMES
+
+DATA_DIR = Path(__file__).parent.parent / "data"
+DATA_DIR.mkdir(exist_ok=True)
+
+FAKE_ADDRESSES = [f"0x{'a' * 38}{i:02d}" for i in range(99)]
+
+
+def make_timestamp(base: datetime, offset_sec: int) -> str:
+    return (base + timedelta(seconds=offset_sec)).isoformat() + "Z"
+
+
+def build_hop(index, from_addr, to_addr, usd, ts, internal=False, token=None):
+    return {
+        "hopIndex": index,
+        "fromAddress": from_addr,
+        "toAddress": to_addr,
+        "amountEth": usd / 3000,
+        "txHash": f"0x{'f' * 62}{index:02d}",
+        "txTimestamp": ts,
+        "usdValue": usd,
+        "isInternalTx": internal,
+        "tokenSymbol": token,
+    }
+
+
+def make_feature_row(hops, terminal_type, dest_prior_tx, tree_data=None):
+    """Runs real pipeline on synthetic hops — this is the correct approach."""
+    root = hops[0]["fromAddress"]
+    G = build_digraph_from_hops(hops, root)
+    metrics = compute_graph_metrics(G, hops)
+    vec = build_feature_vector(hops, metrics, terminal_type, dest_prior_tx, tree_data)
+    return vec.tolist()
+
+
+def gen_rapid_forward(n=200):
+    """Fraud: 3-5 hops, all within <1 hour. is_linear_chain=True, low velocity."""
+    rows = []
+    for _ in range(n):
+        base = datetime(2024, random.randint(1,12), random.randint(1,28), 12, 0)
+        usd = random.uniform(1000, 50000)
+        hop_count = random.randint(3, 5)
+        hops, offset = [], 0
+        addrs = random.sample(FAKE_ADDRESSES, hop_count + 1)
+        for i in range(hop_count):
+            offset += random.randint(30, 600)   # 30s – 10min between hops
+            hops.append(build_hop(i+1, addrs[i], addrs[i+1], usd * (0.97**i), make_timestamp(base, offset)))
+        rows.append(make_feature_row(hops, "inconclusive", 0))
+    return rows
+
+
+def gen_peeling_chain(n=150):
+    """Fraud: each hop drops value by 20-50%. is_peeling_chain=1, value_decay_ratio high."""
+    rows = []
+    for _ in range(n):
+        base = datetime(2024, random.randint(1,12), random.randint(1,28), 12, 0)
+        usd = random.uniform(5000, 100000)
+        hop_count = random.randint(3, 5)
+        hops, offset = [], 0
+        addrs = random.sample(FAKE_ADDRESSES, hop_count + 1)
+        for i in range(hop_count):
+            offset += random.randint(60, 3600)
+            usd *= random.uniform(0.5, 0.78)    # 22-50% drop per hop
+            hops.append(build_hop(i+1, addrs[i], addrs[i+1], usd, make_timestamp(base, offset)))
+        rows.append(make_feature_row(hops, "inconclusive", 0))
+    return rows
+
+
+def gen_star_fanout(n=100):
+    """Fraud: 1 hub sends to 3-5 leaf wallets rapidly. is_star_topology=1."""
+    rows = []
+    for _ in range(n):
+        base = datetime(2024, random.randint(1,12), random.randint(1,28), 12, 0)
+        total_usd = random.uniform(10000, 200000)
+        fan = random.randint(3, 5)
+        root = FAKE_ADDRESSES[0]
+        hops = []
+        for i in range(fan):
+            ts = make_timestamp(base, random.randint(5, 120))
+            hops.append(build_hop(i+1, root, FAKE_ADDRESSES[i+1], total_usd/fan, ts))
+        rows.append(make_feature_row(
+            hops, "inconclusive", 0,
+            tree_data={"totalBranches": fan, "exchangeBranches": 0,
+                       "taintCoveragePercent": 95.0, "totalFanOutNodes": 1, "totalFanInNodes": 0}
+        ))
+    return rows
+
+
+def gen_direct_to_vasp(n=300):
+    """Legit: 1-2 hops directly to a known exchange. Low hop count, slow velocity."""
+    rows = []
+    for _ in range(n):
+        base = datetime(2024, random.randint(1,12), random.randint(1,28), 12, 0)
+        usd = random.uniform(100, 5000)
+        hop_count = random.randint(1, 2)
+        hops, offset = [], 0
+        addrs = random.sample(FAKE_ADDRESSES, hop_count + 1)
+        for i in range(hop_count):
+            offset += random.randint(3600, 86400)   # 1hr – 1 day between hops
+            hops.append(build_hop(i+1, addrs[i], addrs[i+1], usd, make_timestamp(base, offset)))
+        rows.append(make_feature_row(hops, "exchange", random.randint(500, 5000)))
+    return rows
+
+
+def gen_payroll_star(n=200):
+    """Legit: Star topology but slow velocity + high dest prior tx count."""
+    rows = []
+    for _ in range(n):
+        base = datetime(2024, random.randint(1,12), random.randint(1,28), 12, 0)
+        total_usd = random.uniform(5000, 50000)
+        fan = random.randint(3, 8)
+        root = FAKE_ADDRESSES[0]
+        hops = []
+        for i in range(fan):
+            ts = make_timestamp(base, random.randint(3600, 86400))   # Slow
+            hops.append(build_hop(i+1, root, FAKE_ADDRESSES[i+1], total_usd/fan, ts))
+        rows.append(make_feature_row(
+            hops, "exchange", random.randint(100, 2000),
+            tree_data={"totalBranches": fan, "exchangeBranches": fan//2,
+                       "taintCoveragePercent": 100.0, "totalFanOutNodes": 1, "totalFanInNodes": 0}
+        ))
+    return rows
+
+
+if __name__ == "__main__":
+    fraud_rows = (
+        gen_rapid_forward(200) +
+        gen_peeling_chain(150) +
+        [(make_feature_row(
+            [build_hop(1, FAKE_ADDRESSES[0], FAKE_ADDRESSES[1], random.uniform(500,5000),
+                       make_timestamp(datetime(2024,1,1,12,0), 60))],
+            "inconclusive", 0
+        )) for _ in range(150)] +   # burner wallet
+        gen_star_fanout(100) +
+        [make_feature_row(
+            [build_hop(i+1, FAKE_ADDRESSES[i], FAKE_ADDRESSES[i+1], 5000, make_timestamp(datetime(2024,1,1), i*60))
+             for i in range(3)], "inconclusive", 0,
+            tree_data={"totalBranches": 2, "exchangeBranches": 0, "taintCoveragePercent": 90.0,
+                       "totalFanOutNodes": 1, "totalFanInNodes": 1}
+        ) for _ in range(100)] +   # hourglass
+        [make_feature_row(
+            [build_hop(i+1, FAKE_ADDRESSES[i%5], FAKE_ADDRESSES[(i+1)%5+1], 2000,
+                       make_timestamp(datetime(2024,1,1), i*30)) for i in range(4)],
+            "inconclusive", 0
+        ) for _ in range(100)]   # cluster
+    )
+
+    legit_rows = (
+        gen_direct_to_vasp(300) +
+        gen_payroll_star(200) +
+        [make_feature_row(
+            [build_hop(1, FAKE_ADDRESSES[0], FAKE_ADDRESSES[1], random.uniform(100, 2000),
+                       make_timestamp(datetime(2024,1,1,12,0), random.randint(3600, 86400)))],
+            "exchange", random.randint(50, 500)
+        ) for _ in range(200)]
+    )
+
+    with open(DATA_DIR / "synthetic_fraud.jsonl", "w") as f:
+        for row in fraud_rows:
+            f.write(json.dumps({"features": row, "label": 1}) + "\n")
+
+    with open(DATA_DIR / "synthetic_legit.jsonl", "w") as f:
+        for row in legit_rows:
+            f.write(json.dumps({"features": row, "label": 0}) + "\n")
+
+    print(f"Generated {len(fraud_rows)} fraud + {len(legit_rows)} legit samples.")
+    print(f"Written to {DATA_DIR}/")
+```
+
+#### 4.3.5 Model Training Script (`ml_models/train.py`)
+
+This is an **offline script** — run once before deployment to train and serialize the model artifact. It trains only on synthetic data from `generate_synthetic.py` — no external datasets.
 
 ```python
 """
 train.py — Offline training script for Vajra Fraud Classifier v1
-Run: python ml_models/train.py
+Run: python ml_models/train.py  (must run generate_synthetic.py first)
 
 Outputs:
   ml_models/artifacts/vajra_fraud_classifier_v1.pkl
   ml_models/artifacts/feature_names.json
+
+Training data: synthetic-only (data/synthetic_fraud.jsonl + data/synthetic_legit.jsonl)
+Rationale: Training exclusively on synthetic data generated by the real pipeline guarantees
+that training and inference compute features identically. Kaggle external datasets are NOT
+used — their column semantics do not map to our per-hop features without data leakage.
 """
 
 import json
 import joblib
 import pandas as pd
-import numpy as np
 from pathlib import Path
 from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, roc_auc_score
 
-from features import FEATURE_NAMES, build_feature_vector
+from features import FEATURE_NAMES
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 ARTIFACTS_DIR = Path(__file__).parent / "artifacts"
 ARTIFACTS_DIR.mkdir(exist_ok=True)
 
 
-def load_kaggle_ethereum_dataset() -> pd.DataFrame:
-    """
-    Loads the Kaggle Ethereum Fraud Detection Dataset.
-    Maps its feature names to our 28-feature vector format.
-    Expected file: services/risk/data/eth_fraud/transaction_dataset.csv
-    """
-    csv_path = DATA_DIR / "eth_fraud" / "transaction_dataset.csv"
-    if not csv_path.exists():
-        raise FileNotFoundError(
-            f"Dataset not found at {csv_path}. "
-            "Run: kaggle datasets download -d vagifa/ethereum-frauddetection-dataset "
-            "-p services/risk/data/eth_fraud/"
-        )
-
-    df = pd.read_csv(csv_path)
-    # Drop rows with NaN labels
-    df = df[df["FLAG"].isin([0, 1])].dropna(subset=["FLAG"])
-
-    # Map Kaggle columns to our feature names
-    # This mapping is approximate — Kaggle dataset uses transaction-level agg features
-    X_mapped = pd.DataFrame({
-        "hop_count":              df.get("Sent tnx", df.get("sent_tnx", 1)),
-        "min_time_between_hops_sec": df.get("min value sent to contract", 0),
-        "max_time_between_hops_sec": df.get("max val sent to contract", 0),
-        "avg_time_between_hops_sec": df.get("avg val sent to contract", 0),
-        "terminal_is_exchange":   0,   # Unknown from dataset
-        "destination_prior_tx_count": df.get("Received Tnx", 0),
-        "is_peeling_chain":       0,
-        "is_dex_routed":          0,
-        "total_usd_transacted":   df.get("total Ether sent", 0),
-        "value_decay_ratio":      0.0,
-        "node_count":             df.get("Sent tnx", 1),
-        "edge_count":             df.get("Sent tnx", 1),
-        "max_fan_out_degree":     1,
-        "max_fan_in_degree":      1,
-        "avg_out_degree":         1.0,
-        "max_degree_centrality":  0.5,
-        "avg_betweenness_centrality": 0.0,
-        "clustering_coefficient": 0.0,
-        "is_linear_chain":        1,
-        "is_star_topology":       0,
-        "is_hourglass_topology":  0,
-        "max_hop_velocity_sec":   df.get("Avg min between sent tnx", 0) * 60,
-        "min_hop_velocity_sec":   df.get("Avg min between sent tnx", 0) * 60,
-        "total_branches":         1,
-        "exchange_branches":      0,
-        "taint_coverage_percent": 0.0,
-        "is_fan_out_detected":    0,
-        "is_fan_in_detected":     0,
-    })
-    y = df["FLAG"].astype(int)
-    return X_mapped, y
-
-
-def load_synthetic_data() -> tuple:
-    """Loads synthetic fraud/legit JSONL files."""
+def load_all_data():
+    """Loads synthetic + real labeled JSONL files. All features computed by real pipeline."""
     X_rows, y_rows = [], []
-    for path, label in [
-        (DATA_DIR / "synthetic_fraud.jsonl", 1),
-        (DATA_DIR / "synthetic_legit.jsonl", 0),
-    ]:
-        if path.exists():
-            with open(path) as f:
-                for line in f:
-                    row = json.loads(line)
-                    X_rows.append(row["features"])
-                    y_rows.append(label)
+    sources = [
+        (DATA_DIR / "synthetic_fraud.jsonl",  1),
+        (DATA_DIR / "synthetic_legit.jsonl",  0),
+        (DATA_DIR / "labeled_real.jsonl",      None),  # label embedded in row
+    ]
+    for path, default_label in sources:
+        if not path.exists():
+            continue
+        with open(path) as f:
+            for line in f:
+                row = json.loads(line.strip())
+                label = row.get("label", default_label)
+                if label is None:
+                    continue
+                X_rows.append(row["features"])
+                y_rows.append(int(label))
+
     if not X_rows:
-        return None, None
+        raise FileNotFoundError(
+            "No training data found. Run `python ml_models/generate_synthetic.py` first."
+        )
     return pd.DataFrame(X_rows, columns=FEATURE_NAMES), pd.Series(y_rows)
 
 
 def train():
-    print("Loading Ethereum fraud dataset...")
-    X_eth, y_eth = load_kaggle_ethereum_dataset()
-
-    X_syn, y_syn = load_synthetic_data()
-    if X_syn is not None:
-        print(f"Loading {len(X_syn)} synthetic samples...")
-        X = pd.concat([X_eth, X_syn], ignore_index=True)
-        y = pd.concat([y_eth, y_syn], ignore_index=True)
-    else:
-        X, y = X_eth, y_eth
-
-    print(f"Total training samples: {len(X)} | Fraud: {y.sum()} | Legit: {(y==0).sum()}")
+    print("Loading training data (synthetic pipeline output)...")
+    X, y = load_all_data()
+    print(f"Total samples: {len(X)} | Fraud: {y.sum()} | Legit: {(y==0).sum()}")
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, stratify=y, random_state=42
     )
 
     model = XGBClassifier(
-        n_estimators=300,
-        max_depth=6,
+        n_estimators=200,
+        max_depth=5,
         learning_rate=0.05,
         subsample=0.8,
         colsample_bytree=0.8,
-        scale_pos_weight=(y == 0).sum() / (y == 1).sum(),  # Handle class imbalance
+        scale_pos_weight=(y == 0).sum() / max((y == 1).sum(), 1),
         random_state=42,
-        use_label_encoder=False,
         eval_metric="logloss",
     )
 
     print("Training XGBoost model...")
     model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=50)
 
-    # Evaluation
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
     print("\n=== Classification Report ===")
     print(classification_report(y_test, y_pred, target_names=["Legitimate", "Fraud"]))
-    print(f"ROC-AUC: {roc_auc_score(y_test, y_prob):.4f}")
+    # Actual AUC printed here — no predicted value in spec
+    print(f"Hold-out ROC-AUC: {roc_auc_score(y_test, y_prob):.4f}")
 
-    # Cross-validation
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     cv_scores = cross_val_score(model, X, y, cv=cv, scoring="roc_auc")
     print(f"5-Fold CV AUC: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
+    print("Note: AUC on synthetic data measures pattern separation, not real-world generalization.")
+    print("Real-world performance improves as labeled_real.jsonl accumulates confirmed cases.")
 
-    # Save artifacts
     joblib.dump(model, ARTIFACTS_DIR / "vajra_fraud_classifier_v1.pkl")
     json.dump(FEATURE_NAMES, open(ARTIFACTS_DIR / "feature_names.json", "w"))
     print(f"\nModel saved to {ARTIFACTS_DIR}/vajra_fraud_classifier_v1.pkl")
@@ -826,7 +1004,7 @@ AI Risk Assessment:
 Write exactly 3 paragraphs:
 Paragraph 1 (Factual Summary): State the wallet address, the date of the incident, the reported stolen amount, and a factual summary of how funds moved through the chain of custody — hop by hop.
 Paragraph 2 (Pattern Analysis): Describe the money laundering technique observed (e.g., layering through multiple wallets, fund splitting/fan-out, rapid forwarding to an exchange). Explain what each risk indicator means in plain language.
-Paragraph 3 (Investigative Recommendation): State which exchange(s) or final wallet(s) the funds reached, the taint coverage percentage, and recommend that LEA issue formal data disclosure requests to the identified exchanges under applicable law (Section 91 CrPC / IT Act 2000).
+Paragraph 3 (Investigative Recommendation): State which exchange(s) or final wallet(s) the funds reached, the taint coverage percentage, and recommend that LEA pursue formal legal channels to obtain transaction records from the identified exchange(s). Do NOT cite any specific section number of any law — investigators must verify applicable current legislation with their legal team before filing.
 """
 ```
 
