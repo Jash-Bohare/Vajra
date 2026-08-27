@@ -152,3 +152,35 @@ export async function getInvestigationRecord(id: string): Promise<any | null> {
     return null;
   }
 }
+
+/**
+ * Fetch all investigation records for a session ordered by created_at DESC (Doc 03 Section 6 & Doc 04 Phase 3)
+ */
+export async function getInvestigationHistoryRecords(sessionId: string): Promise<any[]> {
+  try {
+    const res = await pool.query(
+      `SELECT * FROM investigations
+       WHERE session_id = $1
+       ORDER BY created_at DESC`,
+      [sessionId]
+    );
+
+    return res.rows.map((inv) => ({
+      id: inv.id,
+      sessionId: inv.session_id,
+      walletAddress: inv.wallet_address,
+      chain: inv.chain,
+      status: inv.status,
+      terminalType: inv.terminal_type,
+      terminalExchange: inv.terminal_exchange,
+      riskLevel: inv.risk_level,
+      riskReason: inv.risk_reason,
+      hopDepthUsed: inv.hop_depth_used,
+      createdAt: inv.created_at,
+      completedAt: inv.completed_at,
+    }));
+  } catch (err: any) {
+    console.warn('[DB] Could not query investigation history:', err.message);
+    return [];
+  }
+}

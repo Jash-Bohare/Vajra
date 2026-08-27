@@ -4,12 +4,16 @@ import {
   CreateInvestigationRequest,
   CreateInvestigationResponse,
   InvestigationGraph,
-  GraphNode,
-  GraphEdge,
   RiskScoreRequest,
   RiskScoreResponse,
 } from '@rt-cfas/types';
-import { EthereumProvider, traceWalletHops, isValidEthereumAddress, checksumAddress } from '@rt-cfas/blockchain';
+import {
+  EthereumProvider,
+  traceWalletHops,
+  buildInvestigationGraph,
+  isValidEthereumAddress,
+  checksumAddress,
+} from '@rt-cfas/blockchain';
 import { getApiConfig } from '@rt-cfas/config';
 import {
   getVaspAddressMap,
@@ -17,6 +21,7 @@ import {
   updateInvestigationRecord,
   saveTraceHopRecords,
   getInvestigationRecord,
+  getInvestigationHistoryRecords,
 } from '../db';
 
 export const investigationsRouter = Router();
@@ -55,7 +60,7 @@ async function getRiskScore(hops: any[], terminalType: string): Promise<{ riskLe
 }
 
 /**
- * POST /api/investigations (Doc 03 Section 6 & Doc 04 Phase 2)
+ * POST /api/investigations (Doc 03 Section 6 & Doc 04 Phase 2/3)
  * Traces a suspect wallet address end-to-end
  */
 investigationsRouter.post(
@@ -130,7 +135,7 @@ investigationsRouter.post(
 
 /**
  * GET /api/investigations/:id (Doc 03 Section 6 & Doc 04 Phase 3/5)
- * Returns investigation summary, hops, and graph payload
+ * Returns investigation summary, hops, and InvestigationGraph payload
  */
 investigationsRouter.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -145,49 +150,13 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Investigation not found.' });
   }
 
-  // 2. Build InvestigationGraph (Doc 03 Section 5)
-  const nodes: GraphNode[] = [];
-  const edges: GraphEdge[] = [];
-  const nodeSet = new Set<string>();
-
-  // Add initial wallet node
-  nodes.push({ id: record.walletAddress, type: 'wallet' });
-  nodeSet.add(record.walletAddress.toLowerCase());
-
-  const hops = record.hops || [];
-  for (const hop of hops) {
-    // Edge
-    edges.push({
-      from: hop.fromAddress,
-      to: hop.toAddress,
-      amountEth: hop.amountEth,
-      txHash: hop.txHash,
-      timestamp: hop.txTimestamp,
-    });
-
-    // To Node
-    if (!nodeSet.has(hop.toAddress.toLowerCase())) {
-      const isTerminalExchange =
-        record.terminalType === 'exchange' &&
-        hop.hopIndex === hops.length;
-
-      nodes.push({
-        id: hop.toAddress,
-        type: isTerminalExchange ? 'exchange' : 'wallet',
-        label: isTerminalExchange ? record.terminalExchange : undefined,
-      });
-      nodeSet.add(hop.toAddress.toLowerCase());
-    }
-  }
-
-  const graphPayload: InvestigationGraph = {
-    nodes,
-    edges,
-    terminal: {
-      type: record.terminalType || 'inconclusive',
-      exchangeName: record.terminalExchange,
-    },
-  };
+  // 2. Build InvestigationGraph (Doc 03 Section 5 & Doc 04 Phase 3)
+  const graphPayload: InvestigationGraph = buildInvestigationGraph(
+    record.walletAddress,
+    record.hops || [],
+    record.terminalType || 'inconclusive',
+    record.terminalExchange
+  );
 
   return res.status(200).json({
     id: record.id,
@@ -215,11 +184,18 @@ investigationsRouter.get('/:id/report', (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/investigations (Doc 03 Section 6)
- * Session history endpoint
+ * GET /api/investigations (Doc 03 Section 6 & Doc 04 Phase 3)
+ * Session history endpoint - queries database records, falls back to memoryStore
  */
 investigationsRouter.get('/', async (req: Request, res: Response) => {
   const sessionId = (req.query.sessionId as string) || 'demo_session';
-  const list = Array.from(memoryStore.values()).filter((item) => item.sessionId === sessionId);
+
+  let list = await getInvestigationHistoryRecords(sessionId);
+
+  // Fallback to memoryStore if database returned no results
+  if (list.length === 0) {
+    list = Array.from(memoryStore.values()).filter((item) => item.sessionId === sessionId);
+  }
+
   return res.status(200).json(list);
 });
