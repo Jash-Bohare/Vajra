@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { GraphVisualizer } from '../components/GraphVisualizer';
 import { RiskIndicatorCard } from '../components/RiskIndicatorCard';
+import { TokenBadge } from '../components/TokenBadge';
 import { exportInvestigationPdf } from '../utils/PdfExporter';
 
 export const ResultsPage: React.FC = () => {
@@ -35,9 +36,9 @@ export const ResultsPage: React.FC = () => {
   if (loading) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-        <h2 style={{ fontSize: '1.2rem', marginBottom: '0.8rem' }}>Fetching Live Investigation & Tracing Data...</h2>
+        <h2 style={{ fontSize: '1.2rem', marginBottom: '0.8rem' }}>Fetching Live Targeted Investigation...</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          Retrieving on-chain transaction hops and risk metrics from backend database.
+          Tracing on-chain transactions and decaying tainted currency movements across hops.
         </p>
       </div>
     );
@@ -55,6 +56,9 @@ export const ResultsPage: React.FC = () => {
     );
   }
 
+  const assetsDetected = data.assetsDetected || ['ETH'];
+  const targetAsset = data.targetAsset || assetsDetected[0] || 'ETH';
+
   return (
     <div>
       {/* Action Header Card */}
@@ -67,6 +71,30 @@ export const ResultsPage: React.FC = () => {
           <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>
             ID: <span className="code-badge">{data.id}</span> | Chain: <span className="code-badge">Ethereum</span>
           </p>
+
+          {/* Victim Reference Badge */}
+          {data.victimTxHash && (
+            <div style={{ marginTop: '0.6rem', background: '#090d16', padding: '0.5rem 0.8rem', borderRadius: '6px', border: '1px solid #1e293b', display: 'inline-block' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
+                🔒 Victim Tx Reference: <span className="code-badge">{data.victimTxHash.substring(0, 10)}...{data.victimTxHash.substring(58)}</span>
+              </span>
+              {data.victimAmountUsd && (
+                <span style={{ fontSize: '0.8rem', color: '#10b981', marginLeft: '0.8rem', fontWeight: 600 }}>
+                  (Tainted Balance: ${data.victimAmountUsd.toLocaleString()} USD)
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Target Asset Pill */}
+          <div style={{ marginTop: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>Targeted Asset:</span>
+            <TokenBadge symbol={targetAsset} />
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginLeft: '1rem' }}>All Wallet Assets:</span>
+            {assetsDetected.map((asset: string) => (
+              <TokenBadge key={asset} symbol={asset} />
+            ))}
+          </div>
         </div>
 
         <button
@@ -128,7 +156,7 @@ export const ResultsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Trace Hops Table */}
+      {/* Multi-Asset Traced Hops Table (Spec 08 + TLFT Architecture) */}
       <div className="card">
         <h2 style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>Traced On-Chain Hops ({data.hops?.length || 0})</h2>
         {data.hops && data.hops.length > 0 ? (
@@ -139,39 +167,69 @@ export const ResultsPage: React.FC = () => {
                   <th style={{ padding: '0.75rem' }}>Hop #</th>
                   <th style={{ padding: '0.75rem' }}>Sender (From)</th>
                   <th style={{ padding: '0.75rem' }}>Recipient (To)</th>
-                  <th style={{ padding: '0.75rem' }}>Amount</th>
+                  <th style={{ padding: '0.75rem' }}>Asset</th>
+                  <th style={{ padding: '0.75rem' }}>Transfer Amount</th>
+                  <th style={{ padding: '0.75rem' }}>~USD Value</th>
+                  <th style={{ padding: '0.75rem' }}>Confidence</th>
                   <th style={{ padding: '0.75rem' }}>Timestamp (UTC)</th>
                   <th style={{ padding: '0.75rem' }}>Tx Hash</th>
                 </tr>
               </thead>
               <tbody>
-                {data.hops.map((hop: any) => (
-                  <tr key={hop.hopIndex} style={{ borderBottom: '1px solid #1e293b' }}>
-                    <td style={{ padding: '0.75rem', fontWeight: 600 }}>Hop #{hop.hopIndex}</td>
-                    <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-                      {hop.fromAddress.substring(0, 8)}...{hop.fromAddress.substring(36)}
-                    </td>
-                    <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-                      {hop.toAddress.substring(0, 8)}...{hop.toAddress.substring(36)}
-                    </td>
-                    <td style={{ padding: '0.75rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
-                      {hop.amountEth} ETH
-                    </td>
-                    <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>
-                      {new Date(hop.txTimestamp).toLocaleString()}
-                    </td>
-                    <td style={{ padding: '0.75rem' }}>
-                      <a
-                        href={`https://etherscan.io/tx/${hop.txHash}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}
-                      >
-                        View Tx ↗
-                      </a>
-                    </td>
-                  </tr>
-                ))}
+                {data.hops.map((hop: any) => {
+                  const symbol = hop.tokenSymbol || 'ETH';
+                  const displayAmount = hop.tokenAmount !== undefined ? `${hop.tokenAmount} ${symbol}` : `${hop.amountEth} ETH`;
+                  const usdValStr = hop.usdValue !== undefined ? `$${hop.usdValue.toLocaleString()}` : hop.amountEth > 0 ? `$${(hop.amountEth * 3000).toLocaleString()}` : '$0.00';
+                  const conf = hop.confidence || 'high';
+
+                  return (
+                    <tr key={hop.hopIndex} style={{ borderBottom: '1px solid #1e293b' }}>
+                      <td style={{ padding: '0.75rem', fontWeight: 600 }}>Hop #{hop.hopIndex}</td>
+                      <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                        {hop.fromAddress.substring(0, 8)}...{hop.fromAddress.substring(36)}
+                      </td>
+                      <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                        {hop.toAddress.substring(0, 8)}...{hop.toAddress.substring(36)}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <TokenBadge symbol={symbol} isInternalTx={hop.isInternalTx} />
+                      </td>
+                      <td style={{ padding: '0.75rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
+                        {displayAmount}
+                      </td>
+                      <td style={{ padding: '0.75rem', color: '#10b981', fontWeight: 600 }}>
+                        {usdValStr}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <span
+                          style={{
+                            background: conf === 'high' ? '#065f46' : conf === 'medium' ? '#92400e' : '#7f1d1d',
+                            color: conf === 'high' ? '#6ee7b7' : conf === 'medium' ? '#fcd34d' : '#fca5a5',
+                            padding: '0.2rem 0.5rem',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {conf.toUpperCase()}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>
+                        {new Date(hop.txTimestamp).toLocaleString()}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <a
+                          href={`https://etherscan.io/tx/${hop.txHash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}
+                        >
+                          View Tx ↗
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

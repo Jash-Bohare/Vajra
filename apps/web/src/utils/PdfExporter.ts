@@ -84,7 +84,7 @@ export function exportInvestigationPdf(data: any) {
   if (hops.length > 0) {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text('Hop #   Sender Address                  Recipient Address               Amount (ETH)   Timestamp', 14, y);
+    doc.text('Hop #   Sender Address                  Recipient Address               Asset / Amount          Timestamp', 14, y);
     y += 6;
     doc.line(14, y - 2, pageWidth - 14, y - 2);
 
@@ -93,9 +93,12 @@ export function exportInvestigationPdf(data: any) {
       const fromShort = `${hop.fromAddress.substring(0, 8)}...${hop.fromAddress.substring(36)}`;
       const toShort = `${hop.toAddress.substring(0, 8)}...${hop.toAddress.substring(36)}`;
       const timeStr = new Date(hop.txTimestamp).toISOString().substring(0, 16);
+      const amtStr = hop.tokenSymbol && hop.tokenSymbol !== 'ETH'
+        ? `${hop.tokenAmount || 0} ${hop.tokenSymbol}`
+        : `${hop.amountEth} ETH`;
 
       doc.text(
-        `Hop #${hop.hopIndex}   ${fromShort}   ${toShort}   ${hop.amountEth} ETH   ${timeStr}`,
+        `Hop #${hop.hopIndex}   ${fromShort}   ${toShort}   ${amtStr.padEnd(23, ' ')}   ${timeStr}`,
         14,
         y
       );

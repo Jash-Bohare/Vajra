@@ -44,13 +44,18 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
 
     // Edges
     graph.edges.forEach((edge, index) => {
+      let edgeLabel = `${edge.amountEth} ETH`;
+      if (edge.tokenSymbol && edge.tokenSymbol !== 'ETH') {
+        edgeLabel = edge.usdValue ? `$${edge.usdValue.toLocaleString()} ${edge.tokenSymbol}` : `${edge.tokenSymbol}`;
+      }
+
       cyElements.push({
         group: 'edges',
         data: {
           id: `edge_${index}`,
           source: edge.from,
           target: edge.to,
-          label: `${edge.amountEth} ETH`,
+          label: edgeLabel,
           txHash: edge.txHash,
           timestamp: edge.timestamp,
         },
