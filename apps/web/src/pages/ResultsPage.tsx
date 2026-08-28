@@ -12,6 +12,7 @@ export const ResultsPage: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
+  const [selectedBranch, setSelectedBranch] = useState<any>(null);
 
   useEffect(() => {
     async function fetchInvestigation() {
@@ -191,7 +192,11 @@ export const ResultsPage: React.FC = () => {
 
       {/* Multi-Branch Tree Topology Card (Spec 09) */}
       {(data.tree || data.graph?.tree) && (
-        <BranchSummaryCard tree={data.tree || data.graph?.tree} />
+        <BranchSummaryCard
+          tree={data.tree || data.graph?.tree}
+          selectedBranchId={selectedBranch?.branchId}
+          onSelectBranch={(b) => setSelectedBranch(selectedBranch?.branchId === b.branchId ? null : b)}
+        />
       )}
 
       {/* Interactive Cytoscape.js Fund Flow Graph Canvas */}
@@ -205,88 +210,120 @@ export const ResultsPage: React.FC = () => {
       </div>
 
       {/* Multi-Asset Traced Hops Table (Spec 08 + TLFT Architecture) */}
-      <div className="card">
-        <h2 style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>Traced On-Chain Hops ({data.hops?.length || 0})</h2>
-        {data.hops && data.hops.length > 0 ? (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-                  <th style={{ padding: '0.75rem' }}>Hop #</th>
-                  <th style={{ padding: '0.75rem' }}>Sender (From)</th>
-                  <th style={{ padding: '0.75rem' }}>Recipient (To)</th>
-                  <th style={{ padding: '0.75rem' }}>Asset</th>
-                  <th style={{ padding: '0.75rem' }}>Transfer Amount</th>
-                  <th style={{ padding: '0.75rem' }}>~USD Value</th>
-                  <th style={{ padding: '0.75rem' }}>Confidence</th>
-                  <th style={{ padding: '0.75rem' }}>Timestamp (UTC)</th>
-                  <th style={{ padding: '0.75rem' }}>Tx Hash</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.hops.map((hop: any) => {
-                  const symbol = hop.tokenSymbol || 'ETH';
-                  const displayAmount = hop.tokenAmount !== undefined ? `${hop.tokenAmount} ${symbol}` : `${hop.amountEth} ETH`;
-                  const usdValStr = hop.usdValue !== undefined ? `$${hop.usdValue.toLocaleString()}` : hop.amountEth > 0 ? `$${(hop.amountEth * 3000).toLocaleString()}` : '$0.00';
-                  const conf = hop.confidence || 'high';
+      {(() => {
+        const displayedHops = selectedBranch ? selectedBranch.hops : (data.hops || []);
+        return (
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.8rem', marginBottom: '0.8rem' }}>
+              <h2 style={{ fontSize: '1.1rem', margin: 0 }}>
+                Traced On-Chain Hops ({displayedHops.length})
+                {selectedBranch && (
+                  <span style={{ fontSize: '0.85rem', color: 'var(--accent-cyan)', marginLeft: '0.6rem', fontWeight: 500 }}>
+                    (Filtered by {selectedBranch.branchId})
+                  </span>
+                )}
+              </h2>
 
-                  return (
-                    <tr key={hop.hopIndex} style={{ borderBottom: '1px solid #1e293b' }}>
-                      <td style={{ padding: '0.75rem', fontWeight: 600 }}>Hop #{hop.hopIndex}</td>
-                      <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-                        {hop.fromAddress.substring(0, 8)}...{hop.fromAddress.substring(36)}
-                      </td>
-                      <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-                        {hop.toAddress.substring(0, 8)}...{hop.toAddress.substring(36)}
-                      </td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <TokenBadge symbol={symbol} isInternalTx={hop.isInternalTx} />
-                      </td>
-                      <td style={{ padding: '0.75rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
-                        {displayAmount}
-                      </td>
-                      <td style={{ padding: '0.75rem', color: '#10b981', fontWeight: 600 }}>
-                        {usdValStr}
-                      </td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <span
-                          style={{
-                            background: conf === 'high' ? '#065f46' : conf === 'medium' ? '#92400e' : '#7f1d1d',
-                            color: conf === 'high' ? '#6ee7b7' : conf === 'medium' ? '#fcd34d' : '#fca5a5',
-                            padding: '0.2rem 0.5rem',
-                            borderRadius: '4px',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                          }}
-                        >
-                          {conf.toUpperCase()}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>
-                        {new Date(hop.txTimestamp).toLocaleString()}
-                      </td>
-                      <td style={{ padding: '0.75rem' }}>
-                        <a
-                          href={`https://etherscan.io/tx/${hop.txHash}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}
-                        >
-                          View Tx ↗
-                        </a>
-                      </td>
+              {selectedBranch && (
+                <button
+                  onClick={() => setSelectedBranch(null)}
+                  style={{
+                    background: '#1e293b',
+                    color: '#94a3b8',
+                    border: '1px solid #334155',
+                    padding: '0.3rem 0.7rem',
+                    borderRadius: '4px',
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✕ Show All Branches
+                </button>
+              )}
+            </div>
+
+            {displayedHops.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                      <th style={{ padding: '0.75rem' }}>Hop #</th>
+                      <th style={{ padding: '0.75rem' }}>Sender (From)</th>
+                      <th style={{ padding: '0.75rem' }}>Recipient (To)</th>
+                      <th style={{ padding: '0.75rem' }}>Asset</th>
+                      <th style={{ padding: '0.75rem' }}>Transfer Amount</th>
+                      <th style={{ padding: '0.75rem' }}>~USD Value</th>
+                      <th style={{ padding: '0.75rem' }}>Confidence</th>
+                      <th style={{ padding: '0.75rem' }}>Timestamp (UTC)</th>
+                      <th style={{ padding: '0.75rem' }}>Tx Hash</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {displayedHops.map((hop: any, idx: number) => {
+                      const symbol = hop.tokenSymbol || 'ETH';
+                      const displayAmount = hop.tokenAmount !== undefined ? `${hop.tokenAmount} ${symbol}` : `${hop.amountEth} ETH`;
+                      const usdValStr = hop.usdValue !== undefined ? `$${hop.usdValue.toLocaleString()}` : hop.amountEth > 0 ? `$${(hop.amountEth * 3000).toLocaleString()}` : '$0.00';
+                      const conf = hop.confidence || 'high';
+
+                      return (
+                        <tr key={hop.txHash + '_' + idx} style={{ borderBottom: '1px solid #1e293b' }}>
+                          <td style={{ padding: '0.75rem', fontWeight: 600 }}>Hop #{hop.hopIndex}</td>
+                          <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                            {hop.fromAddress.substring(0, 8)}...{hop.fromAddress.substring(36)}
+                          </td>
+                          <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                            {hop.toAddress.substring(0, 8)}...{hop.toAddress.substring(36)}
+                          </td>
+                          <td style={{ padding: '0.75rem' }}>
+                            <TokenBadge symbol={symbol} isInternalTx={hop.isInternalTx} />
+                          </td>
+                          <td style={{ padding: '0.75rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
+                            {displayAmount}
+                          </td>
+                          <td style={{ padding: '0.75rem', color: '#10b981', fontWeight: 600 }}>
+                            {usdValStr}
+                          </td>
+                          <td style={{ padding: '0.75rem' }}>
+                            <span
+                              style={{
+                                background: conf === 'high' ? '#065f46' : conf === 'medium' ? '#92400e' : '#7f1d1d',
+                                color: conf === 'high' ? '#6ee7b7' : conf === 'medium' ? '#fcd34d' : '#fca5a5',
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {conf.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>
+                            {new Date(hop.txTimestamp).toLocaleString()}
+                          </td>
+                          <td style={{ padding: '0.75rem' }}>
+                            <a
+                              href={`https://etherscan.io/tx/${hop.txHash}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}
+                            >
+                              View Tx ↗
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                No outgoing transactions found for this branch.
+              </p>
+            )}
           </div>
-        ) : (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            No outgoing transactions found for this wallet address.
-          </p>
-        )}
-      </div>
+        );
+      })()}
     </div>
   );
 };

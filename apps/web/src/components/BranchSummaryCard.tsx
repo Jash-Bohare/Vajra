@@ -211,22 +211,21 @@ export const BranchSummaryCard: React.FC<BranchSummaryCardProps> = ({
                     </div>
                   </td>
                   <td style={{ padding: '0.6rem 0.8rem', textAlign: 'right' }}>
-                    {onSelectBranch && (
-                      <button
-                        onClick={() => onSelectBranch(b)}
-                        style={{
-                          background: isSelected ? 'var(--accent-primary)' : '#1e293b',
-                          color: '#fff',
-                          border: '1px solid #334155',
-                          padding: '0.3rem 0.7rem',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {isSelected ? 'Selected ✓' : 'Focus Branch'}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => onSelectBranch && onSelectBranch(b)}
+                      style={{
+                        background: isSelected ? '#0284c7' : '#1e293b',
+                        color: '#fff',
+                        border: '1px solid ' + (isSelected ? '#38bdf8' : '#334155'),
+                        padding: '0.3rem 0.7rem',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        fontWeight: isSelected ? 700 : 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {isSelected ? 'Focused ✓' : '🔍 Focus Branch'}
+                    </button>
                   </td>
                 </tr>
               );

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import cytoscape, { Core } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import { InvestigationGraph, WalletCategory } from '@rt-cfas/types';
@@ -12,12 +12,12 @@ interface GraphVisualizerProps {
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-  burner:       { label: 'Burner Wallet',   bg: '#431407', color: '#fb923c' },
-  intermediary: { label: 'Intermediary',    bg: '#1c1917', color: '#fbbf24' },
-  aggregator:   { label: 'Aggregator',      bg: '#1e1b4b', color: '#818cf8' },
-  exchange:     { label: 'Exchange',        bg: '#064e3b', color: '#10b981' },
-  root:         { label: 'Suspect Wallet',  bg: '#451a1a', color: '#ef4444' },
-  unknown:      { label: 'Unknown',         bg: '#0f172a', color: '#94a3b8' },
+  burner:       { label: '🔥 Burner Wallet',   bg: '#431407', color: '#f97316' },
+  intermediary: { label: '⚡ Intermediary',     bg: '#0f172a', color: '#38bdf8' },
+  aggregator:   { label: '🔀 Aggregator',       bg: '#1e1b4b', color: '#a855f7' },
+  exchange:     { label: '🏦 Exchange',          bg: '#064e3b', color: '#10b981' },
+  root:         { label: '🎯 Suspect Wallet',    bg: '#451a1a', color: '#ef4444' },
+  unknown:      { label: '❓ Unknown',            bg: '#0f172a', color: '#94a3b8' },
 };
 
 export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWalletAddress }) => {
@@ -51,11 +51,25 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
       if (isRoot) labelText = '[ROOT]\n' + shortAddr;
 
       const nodeType = isExchange ? 'exchange' : isRoot ? 'root' : isFanOut ? 'fanout' : isFanIn ? 'fanin' : 'wallet';
-      const cat: WalletCategory = isRoot ? 'root' : (node.walletCategory || (isExchange ? 'exchange' : 'unknown'));
 
-      if (!isRoot && !isExchange && cat !== 'unknown') {
-        const catShort = cat === 'burner' ? 'Burner' : cat === 'intermediary' ? 'Intermed.' : cat === 'aggregator' ? 'Aggregat.' : '';
-        if (catShort) labelText = labelText + '\n' + catShort;
+      let cat: WalletCategory = 'intermediary';
+      if (isRoot) {
+        cat = 'root';
+      } else if (isExchange) {
+        cat = 'exchange';
+      } else if (node.walletCategory) {
+        cat = node.walletCategory;
+      } else if (isFanIn) {
+        cat = 'aggregator';
+      } else if (node.hopVelocitySec !== undefined && node.hopVelocitySec < 300) {
+        cat = 'intermediary';
+      } else {
+        cat = 'burner';
+      }
+
+      if (!isRoot && !isExchange) {
+        const catShort = cat === 'burner' ? '🔥 Burner' : cat === 'aggregator' ? '🔀 Aggregator' : '⚡ Intermed.';
+        labelText = labelText + '\n' + catShort;
       }
 
       cyElements.push({
@@ -96,7 +110,8 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
         {
           selector: 'node',
           style: {
-            'background-color': '#1e293b',
+            'background-color': '#0f172a',
+            'border-color': '#38bdf8',
             color: '#f8fafc',
             label: 'data(label)',
             'font-size': '10px',
@@ -106,16 +121,18 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
             'text-margin-y': 8,
             'text-wrap': 'wrap',
             'text-max-width': '100px',
-            width: 38,
-            height: 38,
-            'border-width': 2,
-            'border-color': '#06b6d4',
+            width: 40,
+            height: 40,
+            'border-width': 3,
           } as any,
         },
-        { selector: 'node[nodeType = "root"]',     style: { 'background-color': '#451a1a', 'border-color': '#ef4444', 'border-width': 3, width: 46, height: 46 } as any },
-        { selector: 'node[nodeType = "exchange"]', style: { 'background-color': '#064e3b', 'border-color': '#10b981', 'border-width': 3, width: 46, height: 46 } as any },
-        { selector: 'node[nodeType = "fanout"]',   style: { 'background-color': '#3b0764', 'border-color': '#c084fc', 'border-width': 3, width: 42, height: 42 } as any },
-        { selector: 'node[nodeType = "fanin"]',    style: { 'background-color': '#1e1b4b', 'border-color': '#818cf8', 'border-width': 3, width: 42, height: 42 } as any },
+        { selector: 'node[walletCategory = "root"]',         style: { 'background-color': '#451a1a', 'border-color': '#ef4444', 'border-width': 3, width: 46, height: 46 } as any },
+        { selector: 'node[walletCategory = "exchange"]',     style: { 'background-color': '#064e3b', 'border-color': '#10b981', 'border-width': 3, width: 46, height: 46 } as any },
+        { selector: 'node[walletCategory = "intermediary"]', style: { 'background-color': '#0f172a', 'border-color': '#38bdf8', 'border-width': 3, width: 40, height: 40 } as any },
+        { selector: 'node[walletCategory = "burner"]',       style: { 'background-color': '#431407', 'border-color': '#f97316', 'border-width': 3, width: 40, height: 40 } as any },
+        { selector: 'node[walletCategory = "aggregator"]',   style: { 'background-color': '#1e1b4b', 'border-color': '#a855f7', 'border-width': 3, width: 42, height: 42 } as any },
+        { selector: 'node[nodeType = "root"]',              style: { 'background-color': '#451a1a', 'border-color': '#ef4444', 'border-width': 3, width: 46, height: 46 } as any },
+        { selector: 'node[nodeType = "exchange"]',          style: { 'background-color': '#064e3b', 'border-color': '#10b981', 'border-width': 3, width: 46, height: 46 } as any },
         {
           selector: 'edge',
           style: {
@@ -133,7 +150,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
             'text-background-shape': 'roundrectangle',
           } as any,
         },
-        { selector: ':selected', style: { 'border-color': '#f59e0b', 'border-width': 4 } as any },
+        { selector: ':selected', style: { 'border-color': '#facc15', 'border-width': 5, 'border-opacity': 1 } as any },
       ],
       layout: (layoutMode === 'breadthfirst'
         ? { name: 'breadthfirst', directed: true, padding: 40, spacingFactor: 1.3, avoidOverlap: true }
@@ -162,9 +179,9 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
   const handleFit = () => { if (cyRef.current) { cyRef.current.fit(); cyRef.current.center(); } };
 
   const selCat = selectedNode
-    ? (selectedNode.walletCategory || (selectedNode.type === 'exchange' ? 'exchange' : selectedNode.type === 'root' ? 'root' : 'unknown'))
+    ? (selectedNode.walletCategory || (selectedNode.type === 'exchange' ? 'exchange' : selectedNode.type === 'root' ? 'root' : 'intermediary'))
     : null;
-  const selCfg = selCat ? (CATEGORY_CONFIG[selCat] || CATEGORY_CONFIG['unknown']) : null;
+  const selCfg = selCat ? (CATEGORY_CONFIG[selCat] || CATEGORY_CONFIG['intermediary']) : null;
 
   return (
     <div style={{ width: '100%' }}>
@@ -189,20 +206,17 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
           </button>
         </div>
 
-        <div style={{ position: 'absolute', bottom: '10px', left: '10px', zIndex: 10, display: 'flex', flexWrap: 'wrap', gap: '0.4rem', fontSize: '0.72rem', background: 'rgba(15,23,42,0.92)', padding: '0.4rem 0.7rem', borderRadius: '6px', border: '1px solid #334155', maxWidth: '400px' }}>
-          <span style={{ color: '#ef4444' }}>Root Suspect</span>
-          <span style={{ color: '#94a3b8' }}>|</span>
-          <span style={{ color: '#10b981' }}>Exchange</span>
-          <span style={{ color: '#94a3b8' }}>|</span>
-          <span style={{ color: '#c084fc' }}>Fan-Out</span>
-          <span style={{ color: '#94a3b8' }}>|</span>
-          <span style={{ color: '#818cf8' }}>Fan-In</span>
-          <span style={{ color: '#94a3b8' }}>|</span>
-          <span style={{ color: '#fb923c' }}>Burner</span>
-          <span style={{ color: '#94a3b8' }}>|</span>
-          <span style={{ color: '#fbbf24' }}>Intermediary</span>
-          <span style={{ color: '#94a3b8' }}>|</span>
-          <span style={{ color: '#818cf8' }}>Aggregator</span>
+        {/* Bottom-left Legend: High Contrast Palette */}
+        <div style={{ position: 'absolute', bottom: '10px', left: '10px', zIndex: 10, display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.75rem', background: 'rgba(15,23,42,0.95)', padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid #334155', backdropFilter: 'blur(4px)' }}>
+          <span style={{ color: '#ef4444', fontWeight: 600 }}>🔴 Root Suspect</span>
+          <span style={{ color: '#64748b' }}>|</span>
+          <span style={{ color: '#10b981', fontWeight: 600 }}>🟢 Exchange Deposit</span>
+          <span style={{ color: '#64748b' }}>|</span>
+          <span style={{ color: '#38bdf8', fontWeight: 600 }}>⚡ Intermediary Wallet</span>
+          <span style={{ color: '#64748b' }}>|</span>
+          <span style={{ color: '#f97316', fontWeight: 600 }}>🔥 Burner Wallet</span>
+          <span style={{ color: '#64748b' }}>|</span>
+          <span style={{ color: '#a855f7', fontWeight: 600 }}>🔀 Aggregator Wallet</span>
         </div>
       </div>
 
