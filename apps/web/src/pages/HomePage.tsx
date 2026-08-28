@@ -15,6 +15,7 @@ export const HomePage: React.FC = () => {
   const navigate = useNavigate();
 
   const presetWallets: { label: string; address: string; asset: AssetType; victimTx?: string }[] = [
+    { label: '🌐 11-Node Multi-Hop Exchange Trail (Binance)', address: '0x0d694430b5e34d65aa04a23d38b74c9f4f60342b', asset: 'ETH' },
     { label: '🟢 USDT Transfer Trail (999 USDT)', address: '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1', asset: 'USDT' },
     { label: '⚙️ DEX Routing Obfuscation (Uniswap)', address: '0x2ea1a2b899dbc43f1c61c78a634817ef90ba1eca', asset: 'ETH' },
     { label: '🟣 Coinbase Trail (10.99 ETH)', address: '0x53ef6da5fc74cdef214367240b0d96c34231258d', asset: 'ETH' },
