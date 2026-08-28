@@ -4,6 +4,7 @@ import { GraphVisualizer } from '../components/GraphVisualizer';
 import { RiskIndicatorCard } from '../components/RiskIndicatorCard';
 import { BranchSummaryCard } from '../components/BranchSummaryCard';
 import { TokenBadge } from '../components/TokenBadge';
+import { InvestigatorActionCard } from '../components/InvestigatorActionCard';
 import { exportInvestigationPdf } from '../utils/PdfExporter';
 
 export const ResultsPage: React.FC = () => {
@@ -59,6 +60,9 @@ export const ResultsPage: React.FC = () => {
 
   const assetsDetected = data.assetsDetected || ['ETH'];
   const targetAsset = data.targetAsset || assetsDetected[0] || 'ETH';
+  // P1-C: derive risk score for alert banner
+  const riskScore: number = data.riskScore || (data.riskLevel === 'high' ? 85 : data.riskLevel === 'medium' ? 55 : 15);
+  const isCriticalRisk = riskScore >= 80;
 
   return (
     <div>
@@ -146,6 +150,44 @@ export const ResultsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* P1-C: Critical Alert Banner — shown when risk score >= 80 */}
+      {isCriticalRisk && (
+        <div
+          style={{
+            padding: '1rem 1.25rem',
+            borderRadius: '8px',
+            border: '2px solid #ef4444',
+            background: 'linear-gradient(135deg, #1c0606 0%, #2d0a0a 100%)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.8rem',
+          }}
+        >
+          <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>🚨</span>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#ef4444', marginBottom: '0.3rem' }}>
+              CRITICAL RISK ALERT — Suspected Active Laundering Operation
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#fca5a5', lineHeight: '1.6' }}>
+              Risk Score: <strong style={{ color: '#ef4444' }}>{riskScore}/100</strong>
+              {' · '}{data.riskReason || 'High-confidence laundering pattern detected across multiple hops.'}
+            </div>
+            <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#f87171' }}>
+              ⚡ Immediate action recommended. Submit preservation request to identified exchange before evidence is moved or obscured.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* P1-B: Investigator Action Card — shown only when exchange is identified */}
+      {data.terminalType === 'exchange' && data.terminalExchange && (
+        <InvestigatorActionCard
+          exchangeName={data.terminalExchange}
+          walletAddress={data.walletAddress}
+          victimTxHash={data.victimTxHash}
+        />
+      )}
 
       {/* Multi-Branch Tree Topology Card (Spec 09) */}
       {(data.tree || data.graph?.tree) && (
