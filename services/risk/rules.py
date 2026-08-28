@@ -183,8 +183,8 @@ def score_unresolved_trail_rule(features: TraceFeatures) -> Optional[RiskScoreRe
 
 
 def score_fan_in_rule(request: RiskScoreRequest, features: TraceFeatures) -> Optional[RiskScoreResponse]:
-    """Topology Rule 1: High risk if fan-in node detected AND trace is anchored to a victimTxHash."""
-    if request.victim_tx_hash and request.total_fan_in_nodes > 0:
+    """Topology Rule 1: High risk if fan-in node detected (hourglass re-convergence)."""
+    if request.total_fan_in_nodes > 0:
         return RiskScoreResponse(
             risk_level="high",
             score=94.0,
@@ -196,8 +196,8 @@ def score_fan_in_rule(request: RiskScoreRequest, features: TraceFeatures) -> Opt
 
 
 def score_fan_out_rule(request: RiskScoreRequest, features: TraceFeatures) -> Optional[RiskScoreResponse]:
-    """Topology Rule 2: High risk if fan-out node detected AND trace is anchored to a victimTxHash."""
-    if request.victim_tx_hash and request.total_fan_out_nodes > 0:
+    """Topology Rule 2: High risk if fan-out node detected (multi-branch dispersion)."""
+    if request.total_fan_out_nodes > 0:
         return RiskScoreResponse(
             risk_level="high",
             score=92.0,
@@ -209,8 +209,8 @@ def score_fan_out_rule(request: RiskScoreRequest, features: TraceFeatures) -> Op
 
 
 def score_multi_vasp_rule(request: RiskScoreRequest, features: TraceFeatures) -> Optional[RiskScoreResponse]:
-    """Topology Rule 3: High risk if 2+ distinct exchanges reached AND trace is anchored to a victimTxHash."""
-    if request.victim_tx_hash and request.exchange_branches >= 2:
+    """Topology Rule 3: High risk if 2+ distinct exchanges reached."""
+    if request.exchange_branches >= 2:
         return RiskScoreResponse(
             risk_level="high",
             score=89.0,

@@ -128,8 +128,8 @@ export const RiskIndicatorCard: React.FC<RiskIndicatorCardProps> = ({
 
         {expanded && (
           <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid #1e293b', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            <p><strong>Explainability Breakdown (Doc 03 Section 16):</strong></p>
-            <ul style={{ paddingLeft: '1.2rem', marginTop: '0.4rem', lineHeight: '1.5' }}>
+            <p><strong style={{ color: '#f1f5f9' }}>On-Chain Intelligence Explainability Breakdown:</strong></p>
+            <ul style={{ paddingLeft: '1.2rem', marginTop: '0.4rem', lineHeight: '1.6' }}>
               <li><strong>Hop Velocity:</strong> Evaluates transfer timestamp diffs between consecutive transfers.</li>
               <li><strong>Recipient Prior History:</strong> Checks target deposit address transaction counts on Etherscan.</li>
               <li><strong>Value Structuring:</strong> Detects peeling chain behavior (&gt; 20% ETH value drop between hops).</li>
