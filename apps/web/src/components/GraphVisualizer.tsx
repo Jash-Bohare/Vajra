@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import cytoscape, { Core } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
-import { InvestigationGraph, GraphNode } from '@rt-cfas/types';
+import { InvestigationGraph, GraphNode, WalletCategory } from '@rt-cfas/types';
 
 // Register dagre layout extension
 cytoscape.use(dagre);
@@ -15,8 +15,18 @@ interface GraphVisualizerProps {
 export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWalletAddress }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
-  const [selectedNode, setSelectedNode] = useState<{ id: string; type: string; label?: string; isFanOut?: boolean; isFanIn?: boolean } | null>(null);
+  const [selectedNode, setSelectedNode] = useState<{ id: string; type: string; label?: string; isFanOut?: boolean; isFanIn?: boolean; walletCategory?: WalletCategory; hopVelocitySec?: number } | null>(null);
   const [layoutMode, setLayoutMode] = useState<'breadthfirst' | 'dagre'>('breadthfirst');
+
+  // P1-A: Human-readable wallet category badge config
+  const CATEGORY_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+    burner:       { label: '🔥 Burner Wallet',    bg: '#431407', color: '#fb923c' },
+    intermediary: { label: '⚡ Intermediary',      bg: '#1c1917', color: '#fbbf24' },
+    aggregator:   { label: '🔀 Aggregator',        bg: '#1e1b4b', color: '#818cf8' },
+    exchange:     { label: '🏦 Exchange',           bg: '#064e3b', color: '#10b981' },
+    root:         { label: '🎯 Suspect Wallet',     bg: '#451a1a', color: '#ef4444' },
+    unknown:      { label: '❓ Unknown',             bg: '#0f172a', color: '#94a3b8' },
+  };
 
   useEffect(() => {
     if (!containerRef.current || !graph) return;
@@ -32,9 +42,16 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
       const isFanIn = Boolean(node.isFanIn);
 
       let labelText = node.label || `${node.id.substring(0, 6)}...${node.id.substring(38)}`;
-      if (isRoot) labelText = `[ROOT] ${labelText}`;
+      if (isRoot) labelText = `[ROOT]\n${labelText}`;
 
       let nodeType = isExchange ? 'exchange' : isRoot ? 'root' : isFanOut ? 'fanout' : isFanIn ? 'fanin' : 'wallet';
+
+      // P1-A: Append category hint to node label
+      const cat = isRoot ? 'root' : (node.walletCategory || (isExchange ? 'exchange' : 'unknown'));
+      const catLabel = cat === 'burner' ? '🔥 Burner' : cat === 'intermediary' ? '⚡ Intermed.' : cat === 'aggregator' ? '🔀 Aggregator' : cat === 'exchange' ? '🏦 Exchange' : cat === 'root' ? '🎯 Suspect' : '';
+      if (catLabel && !isRoot && !isExchange) {
+        labelText += `\n${catLabel}`;
+      }
 
       cyElements.push({
         group: 'nodes',
@@ -47,6 +64,8 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
           isFanOut,
           isFanIn,
           taintedAmountUsd: node.taintedAmountUsd,
+          walletCategory: cat,
+          hopVelocitySec: node.hopVelocitySec,
         },
       });
     });
@@ -185,6 +204,8 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
         label: node.data('exchangeName'),
         isFanOut: node.data('isFanOut'),
         isFanIn: node.data('isFanIn'),
+        walletCategory: node.data('walletCategory'),
+        hopVelocitySec: node.data('hopVelocitySec'),
       });
     });
 
@@ -277,42 +298,48 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
             fontSize: '0.85rem',
           }}
         >
-          <div>
+        <div>
             <strong>Selected Node:</strong>{' '}
             <span className="code-badge" style={{ color: 'var(--accent-cyan)' }}>
               {selectedNode.id}
             </span>{' '}
-            <span
-              style={{
-                marginLeft: '0.5rem',
-                padding: '0.2rem 0.5rem',
-                borderRadius: '4px',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                background:
-                  selectedNode.type === 'exchange'
-                    ? '#064e3b'
-                    : selectedNode.type === 'root'
-                    ? '#451a1a'
-                    : selectedNode.type === 'fanout'
-                    ? '#3b0764'
-                    : selectedNode.type === 'fanin'
-                    ? '#1e1b4b'
-                    : '#0f172a',
-                color:
-                  selectedNode.type === 'exchange'
-                    ? '#10b981'
-                    : selectedNode.type === 'root'
-                    ? '#ef4444'
-                    : selectedNode.type === 'fanout'
-                    ? '#d8b4fe'
-                    : selectedNode.type === 'fanin'
-                    ? '#818cf8'
-                    : '#38bdf8',
-              }}
-            >
-              {selectedNode.label || selectedNode.type.toUpperCase()}
-            </span>
+            {/* P1-A: Wallet category badge */}
+            {(() => {
+              const cat = selectedNode.walletCategory || (selectedNode.type === 'exchange' ? 'exchange' : selectedNode.type === 'root' ? 'root' : 'unknown');
+              const cfg = CATEGORY_CONFIG[cat] || CATEGORY_CONFIG['unknown'];
+              return (
+                <span
+                  style={{
+                    marginLeft: '0.5rem',
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '4px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    background: cfg.bg,
+                    color: cfg.color,
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {cfg.label}
+                </span>
+              );
+            })()}
+            {/* P1-A: Hop velocity badge */}
+            {selectedNode.hopVelocitySec !== undefined && selectedNode.type !== 'root' && selectedNode.type !== 'exchange' && (
+              <span
+                style={{
+                  marginLeft: '0.4rem',
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: '4px',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  background: selectedNode.hopVelocitySec < 60 ? '#7f1d1d' : selectedNode.hopVelocitySec < 300 ? '#78350f' : '#0f172a',
+                  color: selectedNode.hopVelocitySec < 60 ? '#fca5a5' : selectedNode.hopVelocitySec < 300 ? '#fcd34d' : '#94a3b8',
+                }}
+              >
+                ⏱ Forwarded in {selectedNode.hopVelocitySec < 60 ? `${selectedNode.hopVelocitySec}s` : `${Math.round(selectedNode.hopVelocitySec / 60)}min`}
+              </span>
+            )}
           </div>
 
           <a

@@ -25,6 +25,8 @@ export interface AssetSummary {
 /**
  * Graph Visualization Schema (Doc 03 Section 5 & Spec 08 & Spec 09)
  */
+export type WalletCategory = 'burner' | 'intermediary' | 'aggregator' | 'exchange' | 'root' | 'unknown';
+
 export interface GraphNode {
   id: string; // wallet address (checksummed)
   type: 'wallet' | 'exchange' | 'root';
@@ -36,6 +38,12 @@ export interface GraphNode {
   totalReceivedUsd?: number;
   depth?: number;
   taintedAmountUsd?: number;
+  /** P1-A: Wallet classification for LEA investigator display */
+  walletCategory?: WalletCategory;
+  /** P1-A: Time (seconds) between this node receiving and forwarding funds */
+  hopVelocitySec?: number;
+  /** P1-A: Total lifetime tx count for this wallet (from on-chain data) */
+  lifetimeTxCount?: number;
 }
 
 export interface GraphEdge {

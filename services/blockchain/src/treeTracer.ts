@@ -9,7 +9,35 @@ import {
   InvestigationTree,
   BranchTerminalType,
   HopConfidence,
+  WalletCategory,
 } from '@rt-cfas/types';
+
+/**
+ * P1-A: Classify a wallet node into a human-readable investigator category.
+ * Rules (in priority order):
+ *  1. 'exchange'     — matched in VASP seed list
+ *  2. 'aggregator'   — fan-in (receives from multiple branches)
+ *  3. 'burner'       — very low on-chain history (depth ≥ 1, inDegree = 1, no fan-out)
+ *  4. 'intermediary' — rapid forwarding (hopVelocitySec < 300)
+ *  5. 'unknown'      — fallback
+ */
+export function classifyWallet({
+  isExchange,
+  isFanIn,
+  isFanOut,
+  hopVelocitySec,
+}: {
+  isExchange: boolean;
+  isFanIn: boolean;
+  isFanOut: boolean;
+  hopVelocitySec?: number;
+}): WalletCategory {
+  if (isExchange) return 'exchange';
+  if (isFanIn) return 'aggregator';
+  if (isFanOut && hopVelocitySec !== undefined && hopVelocitySec < 300) return 'intermediary';
+  if (hopVelocitySec !== undefined && hopVelocitySec < 300) return 'intermediary';
+  return 'burner'; // default for plain intermediate wallets in a laundering chain
+}
 import { EthereumProvider, NormalizedTx, checksumAddress, VaspLookupFn } from './index';
 
 export const TREE_TRACER_CONFIG = {
@@ -327,6 +355,25 @@ export async function traceWalletTree(
 
       // Create new node in global graph
       const vasp = vaspLookup(nextAddr);
+
+      // P1-A: Compute hop velocity (time from parent tx to this tx)
+      let hopVelocitySec: number | undefined = undefined;
+      if (currentItem.timestampBoundary && tx.timestamp) {
+        const parentMs = new Date(currentItem.timestampBoundary).getTime();
+        const thisMs = new Date(tx.timestamp).getTime();
+        if (!isNaN(parentMs) && !isNaN(thisMs) && thisMs >= parentMs) {
+          hopVelocitySec = Math.round((thisMs - parentMs) / 1000);
+        }
+      }
+
+      // P1-A: Classify wallet category for LEA investigator display
+      const walletCategory = classifyWallet({
+        isExchange: Boolean(vasp),
+        isFanIn: false, // will update if fan-in detected later
+        isFanOut: selectedBranches.length > 1,
+        hopVelocitySec,
+      });
+
       const newNode: GraphNode = {
         id: nextAddr,
         type: vasp ? 'exchange' : 'wallet',
@@ -337,6 +384,8 @@ export async function traceWalletTree(
         outDegree: 0,
         depth: currentItem.depth + 1,
         taintedAmountUsd: txUsdVal,
+        walletCategory,
+        hopVelocitySec,
       };
       visitedGlobal.set(nextKey, newNode);
 
