@@ -12,31 +12,48 @@ import {
   WalletCategory,
 } from '@rt-cfas/types';
 
-/**
- * P1-A: Classify a wallet node into a human-readable investigator category.
- * Rules (in priority order):
- *  1. 'exchange'     — matched in VASP seed list
- *  2. 'aggregator'   — fan-in (receives from multiple branches)
- *  3. 'burner'       — very low on-chain history (depth ≥ 1, inDegree = 1, no fan-out)
- *  4. 'intermediary' — rapid forwarding (hopVelocitySec < 300)
- *  5. 'unknown'      — fallback
- */
-export function classifyWallet({
-  isExchange,
-  isFanIn,
-  isFanOut,
-  hopVelocitySec,
-}: {
+export interface WalletClassificationInputs {
+  isRoot?: boolean;
   isExchange: boolean;
-  isFanIn: boolean;
-  isFanOut: boolean;
+  inDegree?: number;
+  outDegree?: number;
   hopVelocitySec?: number;
-}): WalletCategory {
+  txCount?: number;
+  sweepRatio?: number;
+}
+
+/**
+ * Deterministic Wallet Classifier (MHA / LEA Money Laundering Domain Model)
+ *  - 'root'         : Reported suspect wallet (taint origin)
+ *  - 'exchange'     : Cataloged VASP deposit address (Binance, Coinbase, etc.)
+ *  - 'aggregator'   : Fan-in node receiving from 2+ separate incoming branches
+ *  - 'burner'       : Single-use disposable wallet (txCount <= 4, 1 in / 1 out, high sweep ratio)
+ *  - 'intermediary' : Active layering / forwarding wallet in the money laundering chain
+ */
+export function classifyWallet(inputs: WalletClassificationInputs): WalletCategory {
+  const {
+    isRoot = false,
+    isExchange = false,
+    inDegree = 1,
+    outDegree = 1,
+    hopVelocitySec,
+    txCount,
+    sweepRatio = 1.0,
+  } = inputs;
+
+  if (isRoot) return 'root';
   if (isExchange) return 'exchange';
-  if (isFanIn) return 'aggregator';
-  if (isFanOut && hopVelocitySec !== undefined && hopVelocitySec < 300) return 'intermediary';
-  if (hopVelocitySec !== undefined && hopVelocitySec < 300) return 'intermediary';
-  return 'burner'; // default for plain intermediate wallets in a laundering chain
+  if (inDegree >= 2) return 'aggregator';
+
+  const isSinglePath = inDegree <= 1 && outDegree <= 1;
+  const isLowActivity = txCount !== undefined ? txCount <= 4 : isSinglePath;
+  const isHighSweep = sweepRatio >= 0.80;
+
+  if (isSinglePath && isLowActivity && isHighSweep && (hopVelocitySec === undefined || hopVelocitySec < 1200)) {
+    return 'burner';
+  }
+
+  return 'intermediary';
 }
 import { EthereumProvider, NormalizedTx, checksumAddress, VaspLookupFn } from './index';
 
@@ -114,9 +131,9 @@ export async function traceWalletTree(
     }
   }
 
-  // If root taint still 0, default to $10,000 USD for percentage calculations
+  // If root taint still 0, default to 0; will calculate from outgoing transfers at root node
   if (rootTaintUsd <= 0) {
-    rootTaintUsd = 10000;
+    rootTaintUsd = 0;
   }
 
   // Global Graph Data Structures
@@ -125,6 +142,22 @@ export async function traceWalletTree(
   const branches: BranchSummary[] = [];
   const assetsDetectedSet = new Set<AssetType>();
   let isCapped = false;
+
+  // Pre-scan all assets present on root suspect wallet (ETH + ERC20 tokens)
+  try {
+    const [rootEth, rootTokens] = await Promise.all([
+      provider.getTransactions(rootAddr),
+      provider.getTokenTransactions(rootAddr),
+    ]);
+    if (rootEth.length > 0) assetsDetectedSet.add('ETH');
+    for (const t of rootTokens) {
+      if (t.tokenSymbol) {
+        assetsDetectedSet.add(t.tokenSymbol as AssetType);
+      }
+    }
+  } catch (err) {
+    assetsDetectedSet.add('ETH');
+  }
 
   // Initialize Root Node
   const rootNode: GraphNode = {
@@ -269,11 +302,19 @@ export async function traceWalletTree(
       continue;
     }
 
-    // Sort candidates by highest USD value
-    candidateTxs.sort((a, b) => (b.usdValue || b.amountEth * 3000) - (a.usdValue || a.amountEth * 3000));
-
     // Cap outgoing branches to MAX_BRANCHES_PER_NODE (3)
     const selectedBranches = candidateTxs.slice(0, TREE_TRACER_CONFIG.MAX_BRANCHES_PER_NODE);
+
+    // At root node level, if rootTaintUsd was 0, sum all outgoing candidate transfers
+    if (currentItem.depth === 0 && rootTaintUsd === 0) {
+      const outgoingSum = selectedBranches.reduce((sum, tx) => sum + (tx.usdValue || tx.amountEth * 3000), 0);
+      rootTaintUsd = outgoingSum > 0 ? outgoingSum : 1000;
+      if (currentNode) {
+        currentNode.taintedAmountUsd = rootTaintUsd;
+      }
+      currentItem.currentTaintUsd = rootTaintUsd;
+      currentItem.initialBranchTaintUsd = rootTaintUsd;
+    }
 
     if (selectedBranches.length > 1 && currentNode) {
       currentNode.isFanOut = true;
@@ -283,6 +324,9 @@ export async function traceWalletTree(
       currentNode.outDegree = (currentNode.outDegree || 0) + selectedBranches.length;
     }
 
+    // Total USD value of outgoing selected transfers for proportional taint distribution
+    const totalSelectedTxUsd = selectedBranches.reduce((sum, tx) => sum + (tx.usdValue || tx.amountEth * 3000), 0);
+
     for (const tx of selectedBranches) {
       const nextAddr = checksumAddress(tx.toAddress);
       const nextKey = nextAddr.toLowerCase();
@@ -290,7 +334,18 @@ export async function traceWalletTree(
       assetsDetectedSet.add(symbol);
 
       const txUsdVal = tx.usdValue || (tx.tokenAmount || tx.amountEth * 3000);
-      const branchTaintPercent = Math.min((txUsdVal / (currentItem.currentTaintUsd || 1)) * 100, 100);
+
+      // Proportional Taint Decay Capping:
+      // A branch cannot carry more tainted USD than the parent node's current taint balance.
+      let branchTaintUsd = txUsdVal;
+      if (selectedBranches.length > 1 && totalSelectedTxUsd > 0) {
+        branchTaintUsd = Math.min(currentItem.currentTaintUsd, (txUsdVal / totalSelectedTxUsd) * currentItem.currentTaintUsd);
+      } else {
+        branchTaintUsd = Math.min(currentItem.currentTaintUsd, txUsdVal);
+      }
+      if (branchTaintUsd <= 0) branchTaintUsd = txUsdVal;
+
+      const branchTaintPercent = Math.min(parseFloat(((branchTaintUsd / (currentItem.currentTaintUsd || 1)) * 100).toFixed(1)), 100);
 
       const hop: TraceHop = {
         hopIndex: currentItem.depth + 1,
@@ -340,8 +395,8 @@ export async function traceWalletTree(
           terminalType: vasp ? 'exchange' : 'dead_end',
           exchangeName: vasp,
           initialTaintedAmountUsd: currentItem.initialBranchTaintUsd,
-          finalAmountUsd: txUsdVal,
-          taintPercentage: parseFloat(((txUsdVal / rootTaintUsd) * 100).toFixed(1)),
+          finalAmountUsd: branchTaintUsd,
+          taintPercentage: Math.min(parseFloat(((branchTaintUsd / (rootTaintUsd || 1)) * 100).toFixed(1)), 100.0),
           hops: [...currentItem.pathHops, hop],
         });
         continue;
@@ -368,9 +423,10 @@ export async function traceWalletTree(
 
       // P1-A: Classify wallet category for LEA investigator display
       const walletCategory = classifyWallet({
+        isRoot: false,
         isExchange: Boolean(vasp),
-        isFanIn: false, // will update if fan-in detected later
-        isFanOut: selectedBranches.length > 1,
+        inDegree: 1,
+        outDegree: 1,
         hopVelocitySec,
       });
 
@@ -396,8 +452,8 @@ export async function traceWalletTree(
       queue.push({
         address: nextAddr,
         depth: currentItem.depth + 1,
-        currentTaintUsd: txUsdUsdVal(txUsdVal),
-        initialBranchTaintUsd: currentItem.depth === 0 ? txUsdVal : currentItem.initialBranchTaintUsd,
+        currentTaintUsd: branchTaintUsd,
+        initialBranchTaintUsd: currentItem.depth === 0 ? branchTaintUsd : currentItem.initialBranchTaintUsd,
         pathHops: [...currentItem.pathHops, hop],
         timestampBoundary: tx.timestamp,
         visitedPerBranch: nextVisitedBranch,

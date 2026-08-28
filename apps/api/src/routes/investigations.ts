@@ -139,20 +139,38 @@ investigationsRouter.post(
       const vaspMap = await getVaspAddressMap();
       const lookupFn = (addr: string) => vaspMap.get(addr.toLowerCase());
 
-      // 3. Execute Multi-Branch Tree Engine Tracing
+      // 3. Pre-scan all wallet assets and execute Multi-Branch Tree Engine Tracing in parallel
       console.log(`[API] Tree Tracing suspect wallet: ${formattedAddr} (Target Asset: ${targetAsset || 'Auto'}, Victim Tx: ${victimTxHash || 'None'})`);
-      const treeResult = await traceWalletTree(
-        formattedAddr,
-        ethereumProvider,
-        lookupFn,
-        5,
-        targetAsset,
-        victimTxHash,
-        victimAmountUsd
+      const [scannedAssetSummaries, treeResult] = await Promise.all([
+        scanWalletAssets(formattedAddr, ethereumProvider).catch(() => []),
+        traceWalletTree(
+          formattedAddr,
+          ethereumProvider,
+          lookupFn,
+          5,
+          targetAsset,
+          victimTxHash,
+          victimAmountUsd
+        ),
+      ]);
+
+      const scannedAssetSymbols = scannedAssetSummaries.map((a) => a.symbol);
+      const combinedAssets = Array.from(
+        new Set([...scannedAssetSymbols, ...(treeResult.assetsDetected || []), 'ETH'])
       );
 
-      // Extract primary branch hops for backwards compatibility
-      const primaryHops = treeResult.tree.branches.length > 0 ? treeResult.tree.branches[0].hops : [];
+      // Collect all unique hops across ALL branches in the tree
+      const allHopsMap = new Map<string, any>();
+      for (const branch of treeResult.tree.branches) {
+        for (const hop of branch.hops) {
+          const key = `${hop.fromAddress.toLowerCase()}_${hop.toAddress.toLowerCase()}_${hop.txHash.toLowerCase()}`;
+          if (!allHopsMap.has(key)) {
+            allHopsMap.set(key, hop);
+          }
+        }
+      }
+      const allHops = Array.from(allHopsMap.values()).sort((a, b) => a.hopIndex - b.hopIndex);
+      const primaryHops = allHops.length > 0 ? allHops : (treeResult.tree.branches[0]?.hops || []);
 
       // 4. Compute Risk Score via Python Microservice with Tree Topology Metrics
       const risk = await getRiskScore(
@@ -192,15 +210,18 @@ investigationsRouter.post(
         riskReason: risk.reason,
         riskScore: risk.score,
         riskIndicators: risk.indicators,
-        assetsDetected: treeResult.assetsDetected,
-        targetAsset: treeResult.tree.targetAsset || targetAsset,
+        assetsDetected: combinedAssets,
+        targetAsset: treeResult.tree.targetAsset || targetAsset || 'ETH',
         victimTxHash: treeResult.tree.victimTxHash,
         victimAmountUsd: treeResult.tree.victimAmountUsd,
         hopDepthUsed: treeResult.tree.branches[0]?.hopCount || 1,
         createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
         hops: primaryHops,
-        graph: treeResult.graph,
+        graph: {
+          ...treeResult.graph,
+          assetsDetected: combinedAssets,
+        },
         tree: treeResult.tree,
       });
 
