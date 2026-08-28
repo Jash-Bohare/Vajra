@@ -123,7 +123,7 @@ export const ResultsPage: React.FC = () => {
       <RiskIndicatorCard
         riskLevel={data.riskLevel}
         riskReason={data.riskReason}
-        score={data.riskScore || (data.riskLevel === 'high' ? 85 : data.riskLevel === 'medium' ? 55 : 15)}
+        score={riskScore}
         indicators={data.riskIndicators || (data.riskLevel === 'high' ? ['burner_wallet', 'rapid_forwarding'] : ['direct_vasp_deposit'])}
       />
 
