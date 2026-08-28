@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 
 /**
  * P1-B: Investigator Action Card
@@ -142,9 +142,9 @@ function getActionSteps(exchangeName: string, walletAddress: string, txHash?: st
     {
       step: 1,
       action: 'Submit Preservation Request (Immediate)',
-      detail: Contact  compliance team to preserve KYC records and account data linked to deposit address. Do NOT disclose investigative details at this stage.,
+      detail: `Contact ${exchangeName} compliance team to preserve KYC records and account data linked to deposit address. Do NOT disclose investigative details at this stage.`,
       url: info?.leaPortalUrl,
-      urlLabel: info?.leaPortalName || ${exchangeName} LEA Portal,
+      urlLabel: info?.leaPortalName || `${exchangeName} LEA Portal`,
     },
     {
       step: 2,
@@ -154,7 +154,7 @@ function getActionSteps(exchangeName: string, walletAddress: string, txHash?: st
     {
       step: 3,
       action: 'Submit Freeze Request via SAHYOG',
-      detail: After judicial order, submit formal freeze request through the SAHYOG Portal (MHA). Include suspect wallet (...) and traced deposit at .,
+      detail: `After judicial order, submit formal freeze request through the SAHYOG Portal (MHA). Include suspect wallet (${walletAddress.substring(0, 12)}...) and traced deposit at ${exchangeName}.`,
       url: 'https://sahyog.cybercrime.gov.in',
       urlLabel: 'SAHYOG Portal (MHA)',
     },
@@ -168,8 +168,8 @@ function getActionSteps(exchangeName: string, walletAddress: string, txHash?: st
     ...(txHash ? [{
       step: 5,
       action: 'Attach On-Chain Evidence',
-      detail: Victim transaction ... is anchored as taint origin. Attach the Etherscan record as court evidence alongside this PDF.,
-      url: https://etherscan.io/tx/,
+      detail: `Victim transaction ${txHash.substring(0, 14)}... is anchored as taint origin. Attach the Etherscan record as court evidence alongside this PDF.`,
+      url: `https://etherscan.io/tx/${txHash}`,
       urlLabel: 'View Victim Tx on Etherscan',
     }] : []),
   ];
@@ -238,7 +238,7 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
               {info.notes}
               {info.leaEmail && (
                 <span style={{ marginLeft: '0.5rem', color: '#6ee7b7' }}>
-                  · LEA Email: <a href={mailto:} style={{ color: '#34d399' }}>{info.leaEmail}</a>
+                  · LEA Email: <a href={`mailto:${info.leaEmail}`} style={{ color: '#34d399' }}>{info.leaEmail}</a>
                 </span>
               )}
             </div>
@@ -280,7 +280,7 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
                     <a href={step.url} target="_blank" rel="noreferrer"
                       style={{ display: 'inline-block', marginTop: '0.4rem', color: '#34d399', fontSize: '0.78rem', fontWeight: 600, textDecoration: 'none' }}
                     >
-                      {step.urlLabel} ->
+                      {step.urlLabel} ↗
                     </a>
                   )}
                 </div>
