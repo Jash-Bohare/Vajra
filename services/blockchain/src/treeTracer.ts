@@ -323,10 +323,30 @@ export async function traceWalletTree(
 
     if (currentNode) {
       currentNode.outDegree = (currentNode.outDegree || 0) + selectedBranches.length;
+
+      // Accurately compute forwarding holding time for the wallet that forwarded the funds
+      if (currentItem.timestampBoundary && selectedBranches.length > 0) {
+        const inMs = new Date(currentItem.timestampBoundary).getTime();
+        const outMs = new Date(selectedBranches[0].timestamp).getTime();
+        if (!isNaN(inMs) && !isNaN(outMs) && outMs >= inMs) {
+          currentNode.hopVelocitySec = Math.round((outMs - inMs) / 1000);
+        }
+      }
+
+      // Reclassify wallet category with updated outDegree and hopVelocitySec
+      if (currentNode.type !== 'root' && currentNode.type !== 'exchange') {
+        currentNode.walletCategory = classifyWallet({
+          isRoot: false,
+          isExchange: false,
+          inDegree: currentNode.inDegree || 1,
+          outDegree: currentNode.outDegree,
+          hopVelocitySec: currentNode.hopVelocitySec,
+        });
+      }
     }
 
     // Total USD value of outgoing selected transfers for proportional taint distribution
-    const totalSelectedTxUsd = selectedBranches.reduce((sum, tx) => sum + (tx.usdValue || tx.amountEth * 3000), 0);
+    const totalSelectedTxUsd = selectedBranches.reduce((sum, tx) => sum + (tx.usdValue || tx.amountEth * ethPriceUsd), 0);
 
     for (const tx of selectedBranches) {
       const nextAddr = checksumAddress(tx.toAddress);
@@ -334,7 +354,7 @@ export async function traceWalletTree(
       const symbol = tx.tokenSymbol || 'ETH';
       assetsDetectedSet.add(symbol);
 
-      const txUsdVal = tx.usdValue || (tx.tokenAmount || tx.amountEth * 3000);
+      const txUsdVal = tx.usdValue || (tx.tokenAmount || tx.amountEth * ethPriceUsd);
 
       // Proportional Taint Decay Capping:
       // A branch cannot carry more tainted USD than the parent node's current taint balance.
@@ -346,7 +366,8 @@ export async function traceWalletTree(
       }
       if (branchTaintUsd <= 0) branchTaintUsd = txUsdVal;
 
-      const branchTaintPercent = Math.min(parseFloat(((branchTaintUsd / (currentItem.currentTaintUsd || 1)) * 100).toFixed(1)), 100);
+      // Cumulative root taint share (%) - accurately bounded to initial suspect loss
+      const cumulativeTaintPercent = Math.min(parseFloat(((branchTaintUsd / (rootTaintUsd || 1)) * 100).toFixed(1)), 100.0);
 
       const hop: TraceHop = {
         hopIndex: currentItem.depth + 1,
@@ -365,7 +386,7 @@ export async function traceWalletTree(
         taintedAmountUsd: txUsdVal,
       };
 
-      // Record Edge
+      // Record Edge with cumulative root taint share
       edges.push({
         from: currentAddr,
         to: nextAddr,
@@ -376,7 +397,7 @@ export async function traceWalletTree(
         usdValue: txUsdVal,
         isInternalTx: tx.isInternalTx,
         confidence: 'high',
-        taintPercentage: parseFloat(branchTaintPercent.toFixed(1)),
+        taintPercentage: cumulativeTaintPercent,
       });
 
       // Handle Fan-In Convergence (Bug 1 Fix: Accumulate Taint)
@@ -412,23 +433,13 @@ export async function traceWalletTree(
       // Create new node in global graph
       const vasp = vaspLookup(nextAddr);
 
-      // P1-A: Compute hop velocity (time from parent tx to this tx)
-      let hopVelocitySec: number | undefined = undefined;
-      if (currentItem.timestampBoundary && tx.timestamp) {
-        const parentMs = new Date(currentItem.timestampBoundary).getTime();
-        const thisMs = new Date(tx.timestamp).getTime();
-        if (!isNaN(parentMs) && !isNaN(thisMs) && thisMs >= parentMs) {
-          hopVelocitySec = Math.round((thisMs - parentMs) / 1000);
-        }
-      }
-
-      // P1-A: Classify wallet category for LEA investigator display
+      // Newly discovered node has not forwarded funds yet (outDegree = 0, hopVelocitySec = undefined)
       const walletCategory = classifyWallet({
         isRoot: false,
         isExchange: Boolean(vasp),
         inDegree: 1,
-        outDegree: 1,
-        hopVelocitySec,
+        outDegree: 0,
+        hopVelocitySec: undefined,
       });
 
       const newNode: GraphNode = {
@@ -442,7 +453,7 @@ export async function traceWalletTree(
         depth: currentItem.depth + 1,
         taintedAmountUsd: txUsdVal,
         walletCategory,
-        hopVelocitySec,
+        hopVelocitySec: undefined,
       };
       visitedGlobal.set(nextKey, newNode);
 

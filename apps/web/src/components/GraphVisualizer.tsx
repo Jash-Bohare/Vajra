@@ -40,6 +40,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
     walletCategory?: WalletCategory;
     hopVelocitySec?: number;
     taintedAmountUsd?: number;
+    outDegree?: number;
   } | null>(null);
   const [layoutMode, setLayoutMode] = useState<'breadthfirst' | 'dagre'>('breadthfirst');
 
@@ -138,44 +139,73 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
             'text-margin-y': 8,
             'text-wrap': 'wrap',
             'text-max-width': '100px',
-            width: 40,
-            height: 40,
-            'border-width': 3,
-            transition: 'opacity 0.3s ease, border-width 0.3s ease',
+            'border-width': 2,
+            width: 38,
+            height: 38,
           } as any,
         },
-        { selector: 'node[walletCategory = "root"]',         style: { 'background-color': '#451a1a', 'border-color': '#ef4444', 'border-width': 3, width: 46, height: 46 } as any },
-        { selector: 'node[walletCategory = "exchange"]',     style: { 'background-color': '#064e3b', 'border-color': '#10b981', 'border-width': 3, width: 46, height: 46 } as any },
-        { selector: 'node[walletCategory = "intermediary"]', style: { 'background-color': '#0f172a', 'border-color': '#38bdf8', 'border-width': 3, width: 40, height: 40 } as any },
-        { selector: 'node[walletCategory = "burner"]',       style: { 'background-color': '#431407', 'border-color': '#f97316', 'border-width': 3, width: 40, height: 40 } as any },
-        { selector: 'node[walletCategory = "aggregator"]',   style: { 'background-color': '#1e1b4b', 'border-color': '#a855f7', 'border-width': 3, width: 42, height: 42 } as any },
-        { selector: 'node[nodeType = "root"]',              style: { 'background-color': '#451a1a', 'border-color': '#ef4444', 'border-width': 3, width: 46, height: 46 } as any },
-        { selector: 'node[nodeType = "exchange"]',          style: { 'background-color': '#064e3b', 'border-color': '#10b981', 'border-width': 3, width: 46, height: 46 } as any },
+        {
+          selector: 'node[nodeType = "root"]',
+          style: {
+            'background-color': '#451a1a',
+            'border-color': '#ef4444',
+            'border-width': 3,
+            width: 44,
+            height: 44,
+          } as any,
+        },
+        {
+          selector: 'node[nodeType = "exchange"]',
+          style: {
+            'background-color': '#064e3b',
+            'border-color': '#10b981',
+            'border-width': 3,
+            width: 44,
+            height: 44,
+          } as any,
+        },
+        {
+          selector: 'node[walletCategory = "burner"]',
+          style: {
+            'background-color': '#431407',
+            'border-color': '#f97316',
+          } as any,
+        },
+        {
+          selector: 'node[walletCategory = "aggregator"]',
+          style: {
+            'background-color': '#1e1b4b',
+            'border-color': '#a855f7',
+          } as any,
+        },
         {
           selector: 'edge',
           style: {
             width: 2,
-            'line-color': '#3b82f6',
-            'target-arrow-color': '#3b82f6',
+            'line-color': '#0284c7',
+            'target-arrow-color': '#0284c7',
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
             label: 'data(label)',
-            color: '#38bdf8',
             'font-size': '9px',
-            'text-background-color': '#0f172a',
+            'font-family': 'JetBrains Mono, monospace',
+            'text-background-color': '#090d16',
             'text-background-opacity': 0.85,
             'text-background-padding': '2px',
-            'text-background-shape': 'roundrectangle',
-            transition: 'opacity 0.3s ease, width 0.3s ease',
+            color: '#7dd3fc',
+            'text-rotation': 'autorotate',
           } as any,
         },
         { selector: ':selected', style: { 'border-color': '#facc15', 'border-width': 5, 'border-opacity': 1 } as any },
-        // Focused branch highlights
+        // Branch Highlight Styles
         {
           selector: 'node.branch-highlighted',
           style: {
-            opacity: 1.0,
             'border-width': 4,
+            'border-color': '#38bdf8',
+            'shadow-blur': 15,
+            'shadow-color': '#38bdf8',
+            'shadow-opacity': 0.8,
             'z-index': 100,
           } as any,
         },
@@ -215,6 +245,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
 
     cy.on('tap', 'node', (evt) => {
       const n = evt.target;
+      const outDegree = n.outgoers('edge').length;
       setSelectedNode({
         id: n.data('fullAddress'),
         type: n.data('nodeType'),
@@ -224,6 +255,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
         walletCategory: n.data('walletCategory'),
         hopVelocitySec: n.data('hopVelocitySec'),
         taintedAmountUsd: n.data('taintedAmountUsd'),
+        outDegree,
       });
     });
     cy.on('tap', (evt) => { if (evt.target === cy) setSelectedNode(null); });
@@ -254,17 +286,15 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
     }
 
     branchHops.forEach((h: any) => {
-      const from = (h.fromAddress || '').toLowerCase();
-      const to = (h.toAddress || '').toLowerCase();
-      if (from) activeAddrs.add(from);
-      if (to) activeAddrs.add(to);
+      if (h.fromAddress) activeAddrs.add(h.fromAddress.toLowerCase());
+      if (h.toAddress) activeAddrs.add(h.toAddress.toLowerCase());
       if (h.txHash) activeTxHashes.add(h.txHash.toLowerCase());
     });
 
     cy.batch(() => {
       cy.nodes().forEach((node) => {
-        const fullAddr = (node.data('fullAddress') || node.id() || '').toLowerCase();
-        if (activeAddrs.has(fullAddr)) {
+        const addr = (node.data('fullAddress') || node.id()).toLowerCase();
+        if (activeAddrs.has(addr)) {
           node.removeClass('dimmed').addClass('branch-highlighted');
         } else {
           node.removeClass('branch-highlighted').addClass('dimmed');
@@ -298,12 +328,12 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            background: 'linear-gradient(90deg, #1e293b, #0f172a)',
-            padding: '0.5rem 0.8rem',
-            borderRadius: '6px',
-            marginBottom: '0.6rem',
-            border: '1px solid #38bdf8',
-            fontSize: '0.82rem',
+            background: '#0c2340',
+            border: '1px solid #0284c7',
+            padding: '0.6rem 1rem',
+            borderRadius: '8px',
+            marginBottom: '0.8rem',
+            fontSize: '0.85rem',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -369,44 +399,47 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
         </div>
       </div>
 
+      {/* Selected Node Details Drawer */}
       {selectedNode && (
         <div
           style={{
-            marginTop: '0.75rem',
-            padding: '1rem',
-            background: '#0f172a',
+            marginTop: '0.8rem',
+            padding: '0.8rem 1.2rem',
+            background: '#090d16',
             borderRadius: '8px',
-            border: '1px solid ' + (selCfg ? selCfg.color : '#334155'),
+            border: '1px solid #334155',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.6rem' }}>
-            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-              Selected Node:
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>Selected Node:</span>
             <span
+              className="code-badge"
               style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.74rem',
+                fontSize: '0.82rem',
                 color: 'var(--accent-cyan)',
-                background: '#0d1b2a',
-                padding: '0.15rem 0.5rem',
+                fontFamily: 'var(--font-mono)',
+                padding: '0.2rem 0.5rem',
+                background: '#0f172a',
                 borderRadius: '4px',
-                border: '1px solid #1e3a52',
-                wordBreak: 'break-all',
               }}
             >
               {selectedNode.id}
             </span>
 
+            {/* Wallet Category Badge */}
             {selCfg && (
               <span
                 style={{
-                  padding: '0.2rem 0.7rem',
-                  borderRadius: '4px',
-                  fontSize: '0.78rem',
-                  fontWeight: 700,
                   background: selCfg.bg,
                   color: selCfg.color,
+                  border: `1px solid ${selCfg.color}40`,
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '4px',
+                  fontSize: '0.77rem',
+                  fontWeight: 700,
                   whiteSpace: 'nowrap',
                 }}
               >
@@ -414,13 +447,93 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
               </span>
             )}
 
+            {/* VASP Label Pill */}
             {selectedNode.type === 'exchange' && selectedNode.label && (
-              <span style={{ fontSize: '0.82rem', color: '#10b981', fontWeight: 700 }}>
+              <span
+                style={{
+                  background: '#064e3b',
+                  color: '#10b981',
+                  border: '1px solid #047857',
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '4px',
+                  fontSize: '0.77rem',
+                  fontWeight: 700,
+                }}
+              >
                 {selectedNode.label}
               </span>
             )}
 
-            {selectedNode.hopVelocitySec !== undefined && selectedNode.type !== 'root' && selectedNode.type !== 'exchange' && (
+            {/* Comprehensive Forwarding Velocity & Terminal Status Badge */}
+            {selectedNode.type === 'root' ? (
+              selectedNode.hopVelocitySec !== undefined ? (
+                <span
+                  style={{
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '4px',
+                    fontSize: '0.77rem',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    background: selectedNode.hopVelocitySec < 60 ? '#7f1d1d' : selectedNode.hopVelocitySec < 300 ? '#78350f' : '#1e293b',
+                    color: selectedNode.hopVelocitySec < 60 ? '#fca5a5' : selectedNode.hopVelocitySec < 300 ? '#fcd34d' : '#94a3b8',
+                  }}
+                >
+                  {selectedNode.hopVelocitySec < 60
+                    ? 'Dispersed in ' + selectedNode.hopVelocitySec + 's'
+                    : selectedNode.hopVelocitySec < 3600
+                    ? 'Dispersed in ' + Math.round(selectedNode.hopVelocitySec / 60) + 'min'
+                    : 'Dispersed in ' + (selectedNode.hopVelocitySec / 3600).toFixed(1) + 'hr'}
+                </span>
+              ) : (
+                <span
+                  style={{
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '4px',
+                    fontSize: '0.77rem',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    background: '#451a1a',
+                    color: '#fca5a5',
+                  }}
+                >
+                  Origin Suspect Wallet
+                </span>
+              )
+            ) : selectedNode.outDegree && selectedNode.outDegree > 0 ? (
+              selectedNode.hopVelocitySec !== undefined ? (
+                <span
+                  style={{
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '4px',
+                    fontSize: '0.77rem',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    background: selectedNode.hopVelocitySec < 60 ? '#7f1d1d' : selectedNode.hopVelocitySec < 300 ? '#78350f' : '#1e293b',
+                    color: selectedNode.hopVelocitySec < 60 ? '#fca5a5' : selectedNode.hopVelocitySec < 300 ? '#fcd34d' : '#94a3b8',
+                  }}
+                >
+                  {selectedNode.hopVelocitySec < 60
+                    ? 'Forwarded in ' + selectedNode.hopVelocitySec + 's'
+                    : selectedNode.hopVelocitySec < 3600
+                    ? 'Forwarded in ' + Math.round(selectedNode.hopVelocitySec / 60) + 'min'
+                    : 'Forwarded in ' + (selectedNode.hopVelocitySec / 3600).toFixed(1) + 'hr'}
+                </span>
+              ) : (
+                <span
+                  style={{
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '4px',
+                    fontSize: '0.77rem',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    background: '#1e293b',
+                    color: '#94a3b8',
+                  }}
+                >
+                  Forwarding Intermediary
+                </span>
+              )
+            ) : selectedNode.type === 'exchange' ? (
               <span
                 style={{
                   padding: '0.2rem 0.6rem',
@@ -428,15 +541,25 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
                   fontSize: '0.77rem',
                   fontWeight: 600,
                   whiteSpace: 'nowrap',
-                  background: selectedNode.hopVelocitySec < 60 ? '#7f1d1d' : selectedNode.hopVelocitySec < 300 ? '#78350f' : '#1e293b',
-                  color: selectedNode.hopVelocitySec < 60 ? '#fca5a5' : selectedNode.hopVelocitySec < 300 ? '#fcd34d' : '#94a3b8',
+                  background: '#064e3b',
+                  color: '#86efac',
                 }}
               >
-                {selectedNode.hopVelocitySec < 60
-                  ? 'Forwarded in ' + selectedNode.hopVelocitySec + 's'
-                  : selectedNode.hopVelocitySec < 3600
-                  ? 'Forwarded in ' + Math.round(selectedNode.hopVelocitySec / 60) + 'min'
-                  : 'Forwarded in ' + (selectedNode.hopVelocitySec / 3600).toFixed(1) + 'hr'}
+                Terminal VASP Deposit Point
+              </span>
+            ) : (
+              <span
+                style={{
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '4px',
+                  fontSize: '0.77rem',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  background: '#1e293b',
+                  color: '#94a3b8',
+                }}
+              >
+                Funds Currently Held Here
               </span>
             )}
           </div>
