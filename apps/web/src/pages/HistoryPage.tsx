@@ -78,7 +78,6 @@ export const HistoryPage: React.FC = () => {
                 <th style={{ padding: '0.75rem' }}>Suspect Wallet</th>
                 <th style={{ padding: '0.75rem' }}>Risk Level</th>
                 <th style={{ padding: '0.75rem' }}>VASP Attribution</th>
-                <th style={{ padding: '0.75rem' }}>Hops Used</th>
                 <th style={{ padding: '0.75rem' }}>Date / Time (UTC)</th>
                 <th style={{ padding: '0.75rem' }}>Action</th>
               </tr>
@@ -115,9 +114,6 @@ export const HistoryPage: React.FC = () => {
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>Inconclusive</span>
                       )}
-                    </td>
-                    <td style={{ padding: '0.75rem', color: 'var(--accent-cyan)' }}>
-                      {item.hopDepthUsed ?? 0} Hop{(item.hopDepthUsed ?? 0) === 1 ? '' : 's'}
                     </td>
                     <td style={{ padding: '0.75rem', color: 'var(--text-muted)' }}>
                       {new Date(item.createdAt).toLocaleString()}
