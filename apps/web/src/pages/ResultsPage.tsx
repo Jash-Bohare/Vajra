@@ -164,12 +164,13 @@ export const ResultsPage: React.FC = () => {
         <div
           style={{
             padding: '1rem 1.25rem',
-            borderRadius: '8px',
+            borderRadius: '12px',
             border: '2px solid #ef4444',
             background: 'linear-gradient(135deg, #1c0606 0%, #2d0a0a 100%)',
             display: 'flex',
             alignItems: 'flex-start',
             gap: '0.8rem',
+            marginBottom: '1.5rem',
           }}
         >
           <div>
