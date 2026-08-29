@@ -14,12 +14,12 @@ interface GraphVisualizerProps {
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-  burner:       { label: '🔥 Burner Wallet',   bg: '#431407', color: '#f97316' },
-  intermediary: { label: '⚡ Intermediary',     bg: '#0f172a', color: '#38bdf8' },
-  aggregator:   { label: '🔀 Aggregator',       bg: '#1e1b4b', color: '#a855f7' },
-  exchange:     { label: '🏦 Exchange',          bg: '#064e3b', color: '#10b981' },
-  root:         { label: '🎯 Suspect Wallet',    bg: '#451a1a', color: '#ef4444' },
-  unknown:      { label: '❓ Unknown',            bg: '#0f172a', color: '#94a3b8' },
+  burner:       { label: 'Burner Wallet',      bg: '#431407', color: '#f97316' },
+  intermediary: { label: 'Intermediary',        bg: '#0f172a', color: '#38bdf8' },
+  aggregator:   { label: 'Aggregator',          bg: '#1e1b4b', color: '#a855f7' },
+  exchange:     { label: 'Exchange Deposit',    bg: '#064e3b', color: '#10b981' },
+  root:         { label: 'Suspect Wallet',      bg: '#451a1a', color: '#ef4444' },
+  unknown:      { label: 'Unknown',             bg: '#0f172a', color: '#94a3b8' },
 };
 
 export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
@@ -77,7 +77,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
       }
 
       if (!isRoot && !isExchange) {
-        const catShort = cat === 'burner' ? '🔥 Burner' : cat === 'aggregator' ? '🔀 Aggregator' : '⚡ Intermed.';
+        const catShort = cat === 'burner' ? 'Burner' : cat === 'aggregator' ? 'Aggregator' : 'Intermediary';
         labelText = labelText + '\n' + catShort;
       }
 
@@ -308,7 +308,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ color: '#38bdf8', fontWeight: 700 }}>
-              🌿 Highlighting {selectedBranch.branchId}
+              Highlighting {selectedBranch.branchId}
             </span>
             <span style={{ color: 'var(--text-muted)' }}>
               ({selectedBranch.hopCount} hops  •  {selectedBranch.taintPercentage}% taint share  •  Other branches dimmed)
@@ -328,7 +328,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
                 fontWeight: 600,
               }}
             >
-              ✕ Show All Graph Paths
+              Show All Paths
             </button>
           )}
         </div>
@@ -355,17 +355,17 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
           </button>
         </div>
 
-        {/* Bottom-left Legend: High Contrast Palette */}
+        {/* Bottom-left Legend: Professional Palette */}
         <div style={{ position: 'absolute', bottom: '10px', left: '10px', zIndex: 10, display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.75rem', background: 'rgba(15,23,42,0.95)', padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid #334155', backdropFilter: 'blur(4px)' }}>
-          <span style={{ color: '#ef4444', fontWeight: 600 }}>🔴 Root Suspect</span>
+          <span style={{ color: '#ef4444', fontWeight: 600 }}>● Suspect Wallet</span>
           <span style={{ color: '#64748b' }}>|</span>
-          <span style={{ color: '#10b981', fontWeight: 600 }}>🟢 Exchange Deposit</span>
+          <span style={{ color: '#10b981', fontWeight: 600 }}>● Exchange Deposit</span>
           <span style={{ color: '#64748b' }}>|</span>
-          <span style={{ color: '#38bdf8', fontWeight: 600 }}>⚡ Intermediary Wallet</span>
+          <span style={{ color: '#38bdf8', fontWeight: 600 }}>● Intermediary</span>
           <span style={{ color: '#64748b' }}>|</span>
-          <span style={{ color: '#f97316', fontWeight: 600 }}>🔥 Burner Wallet</span>
+          <span style={{ color: '#f97316', fontWeight: 600 }}>● Burner Wallet</span>
           <span style={{ color: '#64748b' }}>|</span>
-          <span style={{ color: '#a855f7', fontWeight: 600 }}>🔀 Aggregator Wallet</span>
+          <span style={{ color: '#a855f7', fontWeight: 600 }}>● Aggregator</span>
         </div>
       </div>
 

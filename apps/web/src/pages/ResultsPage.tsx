@@ -82,7 +82,7 @@ export const ResultsPage: React.FC = () => {
           {data.victimTxHash && (
             <div style={{ marginTop: '0.6rem', background: '#090d16', padding: '0.5rem 0.8rem', borderRadius: '6px', border: '1px solid #1e293b', display: 'inline-block' }}>
               <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
-                🔒 Victim Tx Reference: <span className="code-badge">{data.victimTxHash.substring(0, 10)}...{data.victimTxHash.substring(58)}</span>
+                Victim Tx Reference: <span className="code-badge">{data.victimTxHash.substring(0, 10)}...{data.victimTxHash.substring(58)}</span>
               </span>
               {data.victimAmountUsd && (
                 <span style={{ fontSize: '0.8rem', color: '#10b981', marginLeft: '0.8rem', fontWeight: 600 }}>
@@ -116,7 +116,7 @@ export const ResultsPage: React.FC = () => {
             fontSize: '0.9rem',
           }}
         >
-          📄 Download Legal PDF Report
+          Download Legal PDF Report
         </button>
       </div>
 
@@ -134,7 +134,7 @@ export const ResultsPage: React.FC = () => {
         {data.terminalType === 'exchange' ? (
           <div style={{ background: '#1a3a2a', padding: '1rem', borderRadius: '8px', border: '1px solid #064e3b' }}>
             <span style={{ color: '#10b981', fontWeight: 700, fontSize: '1.1rem' }}>
-              🎯 MATCHED VASP: {data.terminalExchange}
+              MATCHED VASP: {data.terminalExchange}
             </span>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
               Direct fund transfer path terminates at a verified deposit wallet belonging to <strong>{data.terminalExchange}</strong>. Actionable for freezing requests.
@@ -143,7 +143,7 @@ export const ResultsPage: React.FC = () => {
         ) : (
           <div style={{ background: '#1e293b', padding: '1rem', borderRadius: '8px', border: '1px solid #334155' }}>
             <span style={{ color: '#f59e0b', fontWeight: 600 }}>
-              ⚠️ INCONCLUSIVE (No Known VASP Match Within 5 Hops)
+              INCONCLUSIVE (No Known VASP Match Within 5 Hops)
             </span>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
               Funds passed through intermediary wallets without reaching a cataloged exchange deposit address.
@@ -165,7 +165,6 @@ export const ResultsPage: React.FC = () => {
             gap: '0.8rem',
           }}
         >
-          <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>🚨</span>
           <div>
             <div style={{ fontWeight: 800, fontSize: '1rem', color: '#ef4444', marginBottom: '0.3rem' }}>
               CRITICAL RISK ALERT — Suspected Active Laundering Operation
@@ -175,7 +174,7 @@ export const ResultsPage: React.FC = () => {
               {' · '}{data.riskReason || 'High-confidence laundering pattern detected across multiple hops.'}
             </div>
             <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#f87171' }}>
-              ⚡ Immediate action recommended. Submit preservation request to identified exchange before evidence is moved or obscured.
+              Immediate action recommended: Submit preservation request to identified exchange before evidence is moved or obscured.
             </div>
           </div>
         </div>

@@ -90,7 +90,7 @@ export const RiskIndicatorCard: React.FC<RiskIndicatorCardProps> = ({
                 fontFamily: 'var(--font-mono)',
               }}
             >
-              🏷️ {ind}
+              {ind}
             </span>
           ))}
         </div>

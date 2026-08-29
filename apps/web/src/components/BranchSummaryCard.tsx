@@ -30,7 +30,7 @@ export const BranchSummaryCard: React.FC<BranchSummaryCardProps> = ({
             fontWeight: 600,
           }}
         >
-          🏛️ {exchangeName || 'Known Exchange'}
+          {exchangeName || 'Known Exchange'}
         </span>
       );
     }
@@ -46,7 +46,7 @@ export const BranchSummaryCard: React.FC<BranchSummaryCardProps> = ({
             fontSize: '0.75rem',
           }}
         >
-          🍃 Peeling Leaf (&lt; $5 USD)
+          Peeling Leaf (&lt; $5 USD)
         </span>
       );
     }
@@ -62,7 +62,7 @@ export const BranchSummaryCard: React.FC<BranchSummaryCardProps> = ({
             fontSize: '0.75rem',
           }}
         >
-          🛑 Max Depth (5 Hops)
+          Max Depth (5 Hops)
         </span>
       );
     }
@@ -77,7 +77,7 @@ export const BranchSummaryCard: React.FC<BranchSummaryCardProps> = ({
           fontSize: '0.75rem',
         }}
       >
-        🔍 Uncataloged Wallet
+        Uncataloged Wallet
       </span>
     );
   };
@@ -86,7 +86,7 @@ export const BranchSummaryCard: React.FC<BranchSummaryCardProps> = ({
     <div className="card" style={{ marginTop: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '0.2rem' }}>🌳 Multi-Branch Tree Topology</h2>
+          <h2 style={{ fontSize: '1.2rem', marginBottom: '0.2rem' }}>Multi-Branch Tree Topology</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
             Fund flow breakdown across {tree.totalBranches} independent branches ({tree.exchangeBranches} terminating at cataloged exchanges).
           </p>
@@ -106,7 +106,7 @@ export const BranchSummaryCard: React.FC<BranchSummaryCardProps> = ({
                 fontWeight: 600,
               }}
             >
-              🌿 Fan-Out Splitting ({tree.totalFanOutNodes} nodes)
+              Fan-Out Splitting ({tree.totalFanOutNodes} nodes)
             </span>
           )}
           {tree.totalFanInNodes > 0 && (
@@ -121,7 +121,7 @@ export const BranchSummaryCard: React.FC<BranchSummaryCardProps> = ({
                 fontWeight: 600,
               }}
             >
-              ⌛ Fan-In Convergence ({tree.totalFanInNodes} nodes)
+              Fan-In Convergence ({tree.totalFanInNodes} nodes)
             </span>
           )}
           {tree.isCapped && (
@@ -136,7 +136,7 @@ export const BranchSummaryCard: React.FC<BranchSummaryCardProps> = ({
                 fontWeight: 600,
               }}
             >
-              ⚡ Tree Capped @ 25 Nodes
+              Tree Capped @ 25 Nodes
             </span>
           )}
         </div>
@@ -224,7 +224,7 @@ export const BranchSummaryCard: React.FC<BranchSummaryCardProps> = ({
                         cursor: 'pointer',
                       }}
                     >
-                      {isSelected ? 'Focused ✓' : '🔍 Focus Branch'}
+                      {isSelected ? 'Focused' : 'Focus Branch'}
                     </button>
                   </td>
                 </tr>

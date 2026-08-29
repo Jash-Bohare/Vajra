@@ -110,7 +110,7 @@ export const HistoryPage: React.FC = () => {
                     </td>
                     <td style={{ padding: '0.75rem', fontWeight: 600 }}>
                       {item.terminalType === 'exchange' ? (
-                        <span style={{ color: '#10b981' }}>🎯 {item.terminalExchange}</span>
+                        <span style={{ color: '#10b981' }}>{item.terminalExchange}</span>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>Inconclusive</span>
                       )}

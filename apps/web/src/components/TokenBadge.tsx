@@ -20,10 +20,9 @@ export const TokenBadge: React.FC<TokenBadgeProps> = ({ symbol = 'ETH', isIntern
           fontWeight: 700,
           display: 'inline-flex',
           alignItems: 'center',
-          gap: '0.3rem',
         }}
       >
-        ⚙️ Contract
+        Contract
       </span>
     );
   }
@@ -31,16 +30,16 @@ export const TokenBadge: React.FC<TokenBadgeProps> = ({ symbol = 'ETH', isIntern
   const getStyle = (sym: string) => {
     switch (sym.toUpperCase()) {
       case 'USDT':
-        return { bg: '#064e3b', color: '#10b981', border: '#047857', icon: '🟢' };
+        return { bg: '#064e3b', color: '#10b981', border: '#047857' };
       case 'USDC':
-        return { bg: '#1e3a8a', color: '#60a5fa', border: '#1d4ed8', icon: '🔵' };
+        return { bg: '#1e3a8a', color: '#60a5fa', border: '#1d4ed8' };
       case 'DAI':
-        return { bg: '#713f12', color: '#facc15', border: '#a16207', icon: '🟡' };
+        return { bg: '#713f12', color: '#facc15', border: '#a16207' };
       case 'WETH':
-        return { bg: '#4c1d95', color: '#c084fc', border: '#6d28d9', icon: '🟣' };
+        return { bg: '#4c1d95', color: '#c084fc', border: '#6d28d9' };
       case 'ETH':
       default:
-        return { bg: '#3b0764', color: '#a855f7', border: '#7e22ce', icon: '🟣' };
+        return { bg: '#3b0764', color: '#a855f7', border: '#7e22ce' };
     }
   };
 
@@ -58,10 +57,9 @@ export const TokenBadge: React.FC<TokenBadgeProps> = ({ symbol = 'ETH', isIntern
         fontWeight: 700,
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '0.3rem',
       }}
     >
-      {style.icon} {symbol.toUpperCase()}
+      {symbol.toUpperCase()}
     </span>
   );
 };

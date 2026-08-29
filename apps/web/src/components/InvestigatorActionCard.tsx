@@ -203,7 +203,7 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
       >
         <div>
           <h2 style={{ fontSize: '1.1rem', marginBottom: '0.3rem', color: '#10b981' }}>
-            ⚡ Actionable Intelligence for Investigators
+            Actionable Intelligence for Investigators
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
             Exchange identified: <strong style={{ color: '#10b981' }}>{exchangeName}</strong>
