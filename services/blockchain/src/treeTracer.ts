@@ -500,6 +500,7 @@ export async function traceWalletTree(
     targetAsset: activeTargetAsset || 'ETH',
     victimTxHash,
     victimAmountUsd: rootTaintUsd,
+    ethPriceUsd,
     nodes: nodesArray,
     edges,
     branches,
@@ -523,6 +524,7 @@ export async function traceWalletTree(
     targetAsset: activeTargetAsset || 'ETH',
     victimTxHash,
     victimAmountUsd: rootTaintUsd,
+    ethPriceUsd,
     tree,
   };
 

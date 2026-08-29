@@ -139,24 +139,20 @@ investigationsRouter.post(
       const vaspMap = await getVaspAddressMap();
       const lookupFn = (addr: string) => vaspMap.get(addr.toLowerCase());
 
-      // 3. Pre-scan all wallet assets and execute Multi-Branch Tree Engine Tracing in parallel
+      // 3. Execute Multi-Branch Tree Engine Tracing for targeted asset
       console.log(`[API] Tree Tracing suspect wallet: ${formattedAddr} (Target Asset: ${targetAsset || 'Auto'}, Victim Tx: ${victimTxHash || 'None'})`);
-      const [scannedAssetSummaries, treeResult] = await Promise.all([
-        scanWalletAssets(formattedAddr, ethereumProvider).catch(() => []),
-        traceWalletTree(
-          formattedAddr,
-          ethereumProvider,
-          lookupFn,
-          5,
-          targetAsset,
-          victimTxHash,
-          victimAmountUsd
-        ),
-      ]);
+      const treeResult = await traceWalletTree(
+        formattedAddr,
+        ethereumProvider,
+        lookupFn,
+        5,
+        targetAsset,
+        victimTxHash,
+        victimAmountUsd
+      );
 
-      const scannedAssetSymbols = scannedAssetSummaries.map((a) => a.symbol);
       const combinedAssets = Array.from(
-        new Set([...scannedAssetSymbols, ...(treeResult.assetsDetected || []), 'ETH'])
+        new Set([...(treeResult.assetsDetected || []), targetAsset || 'ETH', 'ETH'])
       );
 
       // Collect all unique hops across ALL branches in the tree
@@ -187,6 +183,11 @@ investigationsRouter.post(
       );
 
       // 5. Persist to DB & Memory Store
+      const snapshotGraph = {
+        ...treeResult.graph,
+        assetsDetected: combinedAssets,
+      };
+
       await saveTraceHopRecords(investigationId, primaryHops);
       await updateInvestigationRecord(
         investigationId,
@@ -195,7 +196,18 @@ investigationsRouter.post(
         treeResult.terminalExchange,
         risk.riskLevel,
         risk.reason,
-        treeResult.tree.branches[0]?.hopCount || 1
+        treeResult.tree.branches[0]?.hopCount || 1,
+        {
+          riskScore: risk.score,
+          riskIndicators: risk.indicators,
+          assetsDetected: combinedAssets,
+          targetAsset: treeResult.tree.targetAsset || targetAsset || 'ETH',
+          victimTxHash: treeResult.tree.victimTxHash,
+          victimAmountUsd: treeResult.tree.victimAmountUsd,
+          ethPriceUsd: treeResult.tree.ethPriceUsd,
+          tree: treeResult.tree,
+          graph: snapshotGraph,
+        }
       );
 
       memoryStore.set(investigationId, {
@@ -214,14 +226,12 @@ investigationsRouter.post(
         targetAsset: treeResult.tree.targetAsset || targetAsset || 'ETH',
         victimTxHash: treeResult.tree.victimTxHash,
         victimAmountUsd: treeResult.tree.victimAmountUsd,
+        ethPriceUsd: treeResult.tree.ethPriceUsd,
         hopDepthUsed: treeResult.tree.branches[0]?.hopCount || 1,
         createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
         hops: primaryHops,
-        graph: {
-          ...treeResult.graph,
-          assetsDetected: combinedAssets,
-        },
+        graph: snapshotGraph,
         tree: treeResult.tree,
       });
 
@@ -238,7 +248,7 @@ investigationsRouter.post(
 
 /**
  * GET /api/investigations/:id (Doc 03 Section 6 & Spec 08)
- * Returns investigation summary, hops, and InvestigationGraph payload
+ * Returns immutable historical investigation snapshot, hops, and InvestigationGraph payload
  */
 investigationsRouter.get('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -264,15 +274,16 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
       victimTxHash: memRecord.victimTxHash || dbRecord.victimTxHash,
       victimTxTimestamp: memRecord.victimTxTimestamp || dbRecord.victimTxTimestamp,
       victimAmountUsd: memRecord.victimAmountUsd || dbRecord.victimAmountUsd,
+      ethPriceUsd: memRecord.ethPriceUsd || dbRecord.ethPriceUsd,
       riskScore: memRecord.riskScore || dbRecord.riskScore,
       riskIndicators: memRecord.riskIndicators || dbRecord.riskIndicators,
-      graph: memRecord.graph,
-      tree: memRecord.tree,
+      graph: memRecord.graph || dbRecord.graph,
+      tree: memRecord.tree || dbRecord.tree,
     };
   }
 
-  // 2. Build InvestigationGraph (Doc 03 Section 5 & Spec 08)
-  const graphPayload: InvestigationGraph = buildInvestigationGraph(
+  // 2. Build InvestigationGraph fallback if missing
+  const graphPayload: InvestigationGraph = record.graph || buildInvestigationGraph(
     record.walletAddress,
     record.hops || [],
     record.terminalType || 'inconclusive',
@@ -299,6 +310,7 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
     victimTxHash: record.victimTxHash,
     victimTxTimestamp: record.victimTxTimestamp,
     victimAmountUsd: record.victimAmountUsd,
+    ethPriceUsd: record.ethPriceUsd || record.tree?.ethPriceUsd || record.graph?.ethPriceUsd,
     hopDepthUsed: record.hopDepthUsed,
     graph: record.graph || graphPayload,
     tree: record.tree || record.graph?.tree,

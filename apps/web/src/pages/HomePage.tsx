@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AssetSummary, AssetType } from '@rt-cfas/types';
 import { TokenBadge } from '../components/TokenBadge';
@@ -13,6 +13,7 @@ export const HomePage: React.FC = () => {
   const [detectedAssets, setDetectedAssets] = useState<AssetSummary[] | null>(null);
 
   const navigate = useNavigate();
+  const scanAbortRef = useRef<AbortController | null>(null);
 
   const presetWallets: { label: string; address: string; asset: AssetType; victimTx?: string }[] = [
     { label: '11-Node Multi-Hop Trail (Binance)', address: '0x0d694430b5e34d65aa04a23d38b74c9f4f60342b', asset: 'ETH' },
@@ -24,22 +25,28 @@ export const HomePage: React.FC = () => {
     { label: 'Fan-In Hourglass Splitting (USDT)', address: '0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918', asset: 'USDT' },
   ];
 
-  const handleScanAssets = async (addressToScan?: string) => {
-    const addr = (addressToScan || walletAddress).trim();
+  const executeScanAssets = async (addr: string, preferredAsset?: AssetType) => {
     if (!addr || !/^0x[a-fA-F0-9]{40}$/.test(addr)) {
-      setError('Please enter a valid 42-character Ethereum wallet address starting with 0x.');
+      setDetectedAssets(null);
+      setScanning(false);
       return;
     }
 
+    if (scanAbortRef.current) {
+      scanAbortRef.current.abort();
+    }
+    const abortController = new AbortController();
+    scanAbortRef.current = abortController;
+
     setScanning(true);
     setError('');
-    setDetectedAssets(null);
 
     try {
       const res = await fetch('/api/investigations/scan-assets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ walletAddress: addr }),
+        signal: abortController.signal,
       });
 
       const data = await res.json();
@@ -47,16 +54,39 @@ export const HomePage: React.FC = () => {
         throw new Error(data.error || 'Failed to scan wallet assets.');
       }
 
-      setDetectedAssets(data.assets || []);
-      if (data.assets && data.assets.length > 0) {
-        setTargetAsset(data.assets[0].symbol);
+      const assets: AssetSummary[] = data.assets || [];
+      setDetectedAssets(assets);
+
+      if (preferredAsset && assets.some((a) => a.symbol === preferredAsset)) {
+        setTargetAsset(preferredAsset);
+      } else if (assets.length > 0) {
+        setTargetAsset(assets[0].symbol);
+      } else {
+        setTargetAsset('ETH');
       }
     } catch (err: any) {
-      setError(err.message || 'Error scanning wallet assets.');
+      if (err.name !== 'AbortError') {
+        setError(err.message || 'Error scanning wallet assets.');
+        setDetectedAssets(null);
+      }
     } finally {
       setScanning(false);
     }
   };
+
+  // Automated debounced scanning when wallet address changes
+  useEffect(() => {
+    const trimmed = walletAddress.trim();
+    if (/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
+      const timer = setTimeout(() => {
+        executeScanAssets(trimmed, targetAsset || undefined);
+      }, 400);
+      return () => clearTimeout(timer);
+    } else {
+      setDetectedAssets(null);
+      setScanning(false);
+    }
+  }, [walletAddress]);
 
   const handleStartInvestigation = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +95,8 @@ export const HomePage: React.FC = () => {
       setError('Please enter a valid 42-character Ethereum wallet address starting with 0x.');
       return;
     }
+
+    if (scanning) return;
 
     setLoading(true);
     setError('');
@@ -96,15 +128,21 @@ export const HomePage: React.FC = () => {
   const handleSelectPreset = (item: { address: string; asset: AssetType; victimTx?: string }) => {
     setWalletAddress(item.address);
     setTargetAsset(item.asset);
-    if (item.victimTx) setVictimTxHash(item.victimTx);
-    handleScanAssets(item.address);
+    if (item.victimTx) {
+      setVictimTxHash(item.victimTx);
+    } else {
+      setVictimTxHash('');
+    }
+    executeScanAssets(item.address, item.asset);
   };
+
+  const isFormReady = !!(walletAddress.trim() && /^0x[a-fA-F0-9]{40}$/.test(walletAddress.trim()) && detectedAssets && !scanning);
 
   return (
     <div className="card">
       <h2 style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>Start Targeted Cyber Fraud Investigation</h2>
       <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
-        Enter a suspect wallet address. The engine pre-scans on-chain assets and applies temporal gating & decaying taint tracking to follow the exact stolen currency path.
+        Enter a suspect wallet address. The engine automatically scans all on-chain assets (ETH, USDT, USDC, DAI) and applies decaying taint tracking to trace the exact stolen currency path.
       </p>
 
       {/* Preset Test Wallet Shortcuts */}
@@ -137,48 +175,35 @@ export const HomePage: React.FC = () => {
       <form onSubmit={handleStartInvestigation}>
         {/* Suspect Wallet Input */}
         <div style={{ marginBottom: '1.2rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Suspect Wallet Address (Ethereum Mainnet)
-          </label>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <input
-              type="text"
-              placeholder="0x..."
-              value={walletAddress}
-              onChange={(e) => {
-                setWalletAddress(e.target.value);
-                setDetectedAssets(null);
-              }}
-              style={{
-                flex: 1,
-                padding: '0.8rem 1rem',
-                borderRadius: '8px',
-                border: '1px solid var(--border-color)',
-                background: '#0f172a',
-                color: 'var(--text-main)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.95rem',
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => handleScanAssets()}
-              disabled={scanning || !walletAddress.trim()}
-              style={{
-                background: '#1e293b',
-                color: 'var(--accent-cyan)',
-                border: '1px solid #334155',
-                padding: '0.8rem 1.2rem',
-                borderRadius: '8px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-                opacity: scanning ? 0.6 : 1,
-              }}
-            >
-              {scanning ? 'Scanning Assets...' : 'Scan Assets'}
-            </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Suspect Wallet Address (Ethereum Mainnet)
+            </label>
+            {scanning && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
+                Scanning on-chain assets (ETH, USDT, USDC, DAI)...
+              </span>
+            )}
           </div>
+          <input
+            type="text"
+            placeholder="0x..."
+            value={walletAddress}
+            onChange={(e) => {
+              setWalletAddress(e.target.value);
+            }}
+            style={{
+              width: '100%',
+              padding: '0.8rem 1rem',
+              borderRadius: '8px',
+              border: `1px solid ${scanning ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
+              background: '#0f172a',
+              color: 'var(--text-main)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.95rem',
+              transition: 'border 0.2s ease',
+            }}
+          />
         </div>
 
         {/* Victim Transaction Reference (Optional Anchor Input) */}
@@ -208,8 +233,8 @@ export const HomePage: React.FC = () => {
           </p>
         </div>
 
-        {/* Step 2: Asset Selection Cards */}
-        {detectedAssets && (
+        {/* Step 2: Discovered Asset Selection Cards */}
+        {detectedAssets && detectedAssets.length > 0 && (
           <div style={{ marginBottom: '1.5rem', background: '#090d16', padding: '1.2rem', borderRadius: '8px', border: '1px solid #1e293b' }}>
             <p style={{ fontSize: '0.9rem', color: '#f8fafc', fontWeight: 600, marginBottom: '0.8rem' }}>
               Select Currency Asset to Trace:
@@ -254,23 +279,32 @@ export const HomePage: React.FC = () => {
           </div>
         )}
 
+        {/* Gated Run Investigation Button */}
         <button
           type="submit"
-          disabled={loading}
+          disabled={!isFormReady || loading}
           style={{
-            background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-cyan))',
-            color: '#fff',
-            border: 'none',
+            background: isFormReady
+              ? 'linear-gradient(135deg, var(--accent-primary), var(--accent-cyan))'
+              : '#1e293b',
+            color: isFormReady ? '#fff' : '#64748b',
+            border: isFormReady ? 'none' : '1px solid #334155',
             padding: '0.85rem 1.8rem',
             borderRadius: '8px',
             fontWeight: 600,
-            cursor: 'pointer',
+            cursor: isFormReady && !loading ? 'pointer' : 'not-allowed',
             fontSize: '1rem',
-            opacity: loading ? 0.7 : 1,
+            transition: 'all 0.2s ease',
           }}
         >
           {loading
             ? 'Initializing Decaying Taint Tracing Engine...'
+            : scanning
+            ? 'Scanning On-Chain Assets (ETH, USDT, USDC, DAI)...'
+            : !walletAddress.trim()
+            ? 'Enter Suspect Wallet Address Above'
+            : !detectedAssets
+            ? 'Scanning On-Chain Assets...'
             : targetAsset
             ? `Run Targeted Investigation for ${targetAsset}`
             : 'Run Investigation'}

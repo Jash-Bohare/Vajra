@@ -1,4 +1,4 @@
-﻿import jsPDF from 'jspdf';
+import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 interface ExchangeInfo {
@@ -277,6 +277,12 @@ export function exportInvestigationPdf(data: any) {
       data.victimTxHash ? (data.victimTxHash.substring(0, 18) + '...' + data.victimTxHash.substring(56)) : 'None (Full Wallet Trace)',
       { content: 'Tainted Loss Value', styles: { fontStyle: 'bold' as const, fillColor: [241, 245, 249] as [number, number, number] } },
       data.victimAmountUsd ? ('$' + data.victimAmountUsd.toLocaleString() + ' USD') : 'Calculated on-chain',
+    ],
+    [
+      { content: 'Investigation Timestamp', styles: { fontStyle: 'bold' as const, fillColor: [241, 245, 249] as [number, number, number] } },
+      data.createdAt ? (new Date(data.createdAt).toISOString().replace('T', ' ').substring(0, 19) + ' UTC') : 'N/A',
+      { content: 'Oracle Rate at Snapshot', styles: { fontStyle: 'bold' as const, fillColor: [241, 245, 249] as [number, number, number] } },
+      (data.ethPriceUsd || data.tree?.ethPriceUsd) ? ('$' + Number(data.ethPriceUsd || data.tree?.ethPriceUsd).toLocaleString() + ' USD / ETH') : '$2,442.00 USD',
     ],
     [
       { content: 'All Detected Assets', styles: { fontStyle: 'bold' as const, fillColor: [241, 245, 249] as [number, number, number] } },

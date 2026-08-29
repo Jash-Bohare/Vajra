@@ -164,6 +164,23 @@ export async function getLiveEthPriceUsd(): Promise<number> {
   return cachedLiveEthPrice.price;
 }
 
+// Global serialized queue to guarantee strictly spaced requests (<= 4 req/sec) across all callers
+let globalEtherscanQueue: Promise<void> = Promise.resolve();
+
+function enqueueEtherscanCall<T>(task: () => Promise<T>, minSpacingMs: number = 250): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    globalEtherscanQueue = globalEtherscanQueue
+      .then(async () => {
+        await new Promise((r) => setTimeout(r, minSpacingMs));
+        const res = await task();
+        resolve(res);
+      })
+      .catch((err) => {
+        reject(err);
+      });
+  });
+}
+
 /**
  * EthereumProvider - Primary implementation backed by Etherscan API (Doc 03 Section 10 & Spec 08)
  */
@@ -171,8 +188,6 @@ export class EthereumProvider implements ChainProvider {
   private apiKey: string;
   private cache: Map<string, CacheEntry<any>> = new Map();
   private ttlMs: number = 10 * 60 * 1000; // 10 minutes TTL
-  private lastRequestTime: number = 0;
-  private minIntervalMs: number = 220; // Guarantee <= 4.5 req/sec rate limit compliance
 
   constructor(apiKey?: string) {
     this.apiKey = apiKey || process.env.ETHERSCAN_API_KEY || '';
@@ -191,24 +206,18 @@ export class EthereumProvider implements ChainProvider {
   }
 
   /**
-   * Throttled fetch with automatic rate-limit retry & backoff
+   * Serialized fetch with automatic rate-limit retry & backoff
    */
   private async fetchWithRetry(url: string, retries: number = 4, backoffMs: number = 600): Promise<any> {
     for (let attempt = 1; attempt <= retries; attempt++) {
-      // Throttle outgoing HTTP calls to respect Etherscan rate limit
-      const now = Date.now();
-      const timeSinceLast = now - this.lastRequestTime;
-      if (timeSinceLast < this.minIntervalMs) {
-        await new Promise((resolve) => setTimeout(resolve, this.minIntervalMs - timeSinceLast));
-      }
-      this.lastRequestTime = Date.now();
-
       try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const json = await response.json();
+        const json = await enqueueEtherscanCall(async () => {
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        }, 260);
 
         // If Etherscan returned rate-limit response ("NOTOK" or "Max rate limit reached")
         if (

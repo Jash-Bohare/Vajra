@@ -39,9 +39,9 @@ export const ResultsPage: React.FC = () => {
   if (loading) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-        <h2 style={{ fontSize: '1.2rem', marginBottom: '0.8rem' }}>Fetching Live Targeted Investigation...</h2>
+        <h2 style={{ fontSize: '1.2rem', marginBottom: '0.8rem' }}>Loading Investigation Snapshot...</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          Tracing on-chain transactions and decaying tainted currency movements across hops.
+          Retrieving immutable on-chain forensic evidence and graph state as recorded at investigation time.
         </p>
       </div>
     );
@@ -61,6 +61,7 @@ export const ResultsPage: React.FC = () => {
 
   const assetsDetected = data.assetsDetected || ['ETH'];
   const targetAsset = data.targetAsset || assetsDetected[0] || 'ETH';
+  const ethRate = data.ethPriceUsd || data.tree?.ethPriceUsd || data.graph?.ethPriceUsd;
   // P1-C: derive risk score for alert banner
   const riskScore: number = data.riskScore || (data.riskLevel === 'high' ? 85 : data.riskLevel === 'medium' ? 55 : 15);
   const isCriticalRisk = riskScore >= 80;
@@ -70,13 +71,19 @@ export const ResultsPage: React.FC = () => {
       {/* Action Header Card */}
       <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.3rem', marginBottom: '0.3rem' }}>Investigation Summary</h2>
+          <h2 style={{ fontSize: '1.3rem', marginBottom: '0.3rem' }}>Investigation Forensic Snapshot</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
             Suspect Wallet: <span className="code-badge">{data.walletAddress}</span>
           </p>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-            ID: <span className="code-badge">{data.id}</span> | Chain: <span className="code-badge">Ethereum</span>
-          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem', marginTop: '0.3rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            <span>ID: <span className="code-badge">{data.id.substring(0, 8)}...</span></span>
+            <span>Recorded: <span className="code-badge">{new Date(data.createdAt).toLocaleString()}</span></span>
+            {ethRate && (
+              <span style={{ color: '#38bdf8', fontWeight: 600 }}>
+                ETH Rate at Snapshot: ${Number(ethRate).toLocaleString()} USD
+              </span>
+            )}
+          </div>
 
           {/* Victim Reference Badge */}
           {data.victimTxHash && (

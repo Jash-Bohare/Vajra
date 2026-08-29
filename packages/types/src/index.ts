@@ -70,6 +70,7 @@ export interface InvestigationGraph {
   targetAsset?: AssetType;
   victimTxHash?: string;
   victimAmountUsd?: number;
+  ethPriceUsd?: number;
   tree?: InvestigationTree; // Phase E2 multi-branch tree graph
 }
 
@@ -95,6 +96,7 @@ export interface InvestigationTree {
   targetAsset: AssetType;
   victimTxHash?: string;
   victimAmountUsd?: number;
+  ethPriceUsd?: number;
   nodes: GraphNode[];
   edges: GraphEdge[];
   branches: BranchSummary[];
@@ -145,9 +147,12 @@ export interface Investigation {
   victimTxHash?: string;
   victimTxTimestamp?: string;
   victimAmountUsd?: number;
+  ethPriceUsd?: number;
   hopDepthUsed?: number;
   reportPath?: string;
   graph?: InvestigationGraph;
+  tree?: InvestigationTree;
+  hops?: TraceHop[];
   createdAt: string;
   completedAt?: string;
 }
