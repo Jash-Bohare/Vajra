@@ -275,8 +275,13 @@ export const ResultsPage: React.FC = () => {
                     {displayedHops.map((hop: any, idx: number) => {
                       const symbol = hop.tokenSymbol || 'ETH';
                       const displayAmount = hop.tokenAmount !== undefined ? `${hop.tokenAmount} ${symbol}` : `${hop.amountEth} ETH`;
-                      const usdValStr = hop.usdValue !== undefined && hop.usdValue > 0
-                        ? `$${hop.usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                      const ethRate = data.ethPriceUsd || data.tree?.ethPriceUsd || data.graph?.ethPriceUsd || 2442;
+                      const calculatedUsd = (hop.usdValue !== undefined && hop.usdValue > 0)
+                        ? hop.usdValue
+                        : (symbol === 'ETH' ? (hop.amountEth || 0) * ethRate : (hop.tokenAmount || 0));
+
+                      const usdValStr = calculatedUsd > 0
+                        ? `$${calculatedUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : '$0.00';
                       const conf = hop.confidence || 'high';
 

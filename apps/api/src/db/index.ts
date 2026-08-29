@@ -32,6 +32,11 @@ pool.on('error', (err) => {
       ALTER TABLE investigations ADD COLUMN IF NOT EXISTS risk_score NUMERIC;
       ALTER TABLE investigations ADD COLUMN IF NOT EXISTS risk_indicators JSONB;
       ALTER TABLE investigations ADD COLUMN IF NOT EXISTS assets_detected JSONB;
+
+      ALTER TABLE trace_hops ADD COLUMN IF NOT EXISTS token_symbol TEXT;
+      ALTER TABLE trace_hops ADD COLUMN IF NOT EXISTS token_amount NUMERIC;
+      ALTER TABLE trace_hops ADD COLUMN IF NOT EXISTS usd_value NUMERIC;
+      ALTER TABLE trace_hops ADD COLUMN IF NOT EXISTS confidence TEXT;
     `);
   } catch (err: any) {
     console.warn('[DB] Schema snapshot columns migration note:', err.message);
@@ -143,14 +148,17 @@ export async function updateInvestigationRecord(
 }
 
 /**
- * Save trace hops in order
+ * Save trace hops in order with complete token and USD valuations
  */
 export async function saveTraceHopRecords(investigationId: string, hops: TraceHop[]): Promise<void> {
   try {
     for (const hop of hops) {
       await pool.query(
-        `INSERT INTO trace_hops (investigation_id, hop_index, from_address, to_address, amount_eth, tx_hash, tx_timestamp)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO trace_hops (
+           investigation_id, hop_index, from_address, to_address, amount_eth,
+           tx_hash, tx_timestamp, token_symbol, token_amount, usd_value, confidence
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           investigationId,
           hop.hopIndex,
@@ -159,6 +167,10 @@ export async function saveTraceHopRecords(investigationId: string, hops: TraceHo
           hop.amountEth,
           hop.txHash,
           hop.txTimestamp,
+          hop.tokenSymbol || 'ETH',
+          hop.tokenAmount || null,
+          hop.usdValue || null,
+          hop.confidence || 'high',
         ]
       );
     }
@@ -199,6 +211,50 @@ export async function getInvestigationRecord(id: string): Promise<any | null> {
       try { parsedAssets = typeof inv.assets_detected === 'string' ? JSON.parse(inv.assets_detected) : inv.assets_detected; } catch {}
     }
 
+    const recordedEthPrice = inv.eth_price_usd ? parseFloat(inv.eth_price_usd) : 2442.0;
+
+    // Collect rich hops from tree branches if available, else from trace_hops table
+    let richHops: any[] = [];
+    if (parsedTree && Array.isArray(parsedTree.branches) && parsedTree.branches.length > 0) {
+      const allHopsMap = new Map<string, any>();
+      for (const branch of parsedTree.branches) {
+        if (Array.isArray(branch.hops)) {
+          for (const hop of branch.hops) {
+            const key = `${hop.fromAddress.toLowerCase()}_${hop.toAddress.toLowerCase()}_${hop.txHash.toLowerCase()}`;
+            if (!allHopsMap.has(key)) {
+              allHopsMap.set(key, hop);
+            }
+          }
+        }
+      }
+      richHops = Array.from(allHopsMap.values()).sort((a, b) => a.hopIndex - b.hopIndex);
+    }
+
+    if (richHops.length === 0) {
+      richHops = hopsRes.rows.map((h) => {
+        const ethAmt = parseFloat(h.amount_eth) || 0;
+        const sym = h.token_symbol || 'ETH';
+        const tokAmt = h.token_amount ? parseFloat(h.token_amount) : undefined;
+        let calculatedUsd = h.usd_value ? parseFloat(h.usd_value) : 0;
+        if (!calculatedUsd || calculatedUsd === 0) {
+          calculatedUsd = sym === 'ETH' ? ethAmt * recordedEthPrice : (tokAmt || 0);
+        }
+
+        return {
+          hopIndex: h.hop_index,
+          fromAddress: h.from_address,
+          toAddress: h.to_address,
+          amountEth: ethAmt,
+          txHash: h.tx_hash,
+          txTimestamp: h.tx_timestamp,
+          tokenSymbol: sym,
+          tokenAmount: tokAmt,
+          usdValue: calculatedUsd,
+          confidence: h.confidence || 'high',
+        };
+      });
+    }
+
     return {
       id: inv.id,
       sessionId: inv.session_id,
@@ -215,20 +271,13 @@ export async function getInvestigationRecord(id: string): Promise<any | null> {
       targetAsset: inv.target_asset || undefined,
       victimTxHash: inv.victim_tx_hash || undefined,
       victimAmountUsd: inv.victim_amount_usd ? parseFloat(inv.victim_amount_usd) : undefined,
-      ethPriceUsd: inv.eth_price_usd ? parseFloat(inv.eth_price_usd) : undefined,
+      ethPriceUsd: recordedEthPrice,
       hopDepthUsed: inv.hop_depth_used,
       tree: parsedTree,
       graph: parsedGraph,
       createdAt: inv.created_at,
       completedAt: inv.completed_at,
-      hops: hopsRes.rows.map((h) => ({
-        hopIndex: h.hop_index,
-        fromAddress: h.from_address,
-        toAddress: h.to_address,
-        amountEth: parseFloat(h.amount_eth),
-        txHash: h.tx_hash,
-        txTimestamp: h.tx_timestamp,
-      })),
+      hops: richHops,
     };
   } catch (err: any) {
     console.warn('[DB] Could not fetch investigation by ID:', err.message);
