@@ -268,7 +268,9 @@ export const ResultsPage: React.FC = () => {
                     {displayedHops.map((hop: any, idx: number) => {
                       const symbol = hop.tokenSymbol || 'ETH';
                       const displayAmount = hop.tokenAmount !== undefined ? `${hop.tokenAmount} ${symbol}` : `${hop.amountEth} ETH`;
-                      const usdValStr = hop.usdValue !== undefined ? `$${hop.usdValue.toLocaleString()}` : hop.amountEth > 0 ? `$${(hop.amountEth * 3000).toLocaleString()}` : '$0.00';
+                      const usdValStr = hop.usdValue !== undefined && hop.usdValue > 0
+                        ? `$${hop.usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                        : '$0.00';
                       const conf = hop.confidence || 'high';
 
                       return (

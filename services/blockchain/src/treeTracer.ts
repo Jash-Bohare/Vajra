@@ -11,6 +11,7 @@ import {
   HopConfidence,
   WalletCategory,
 } from '@rt-cfas/types';
+import { EthereumProvider, NormalizedTx, checksumAddress, getLiveEthPriceUsd, VaspLookupFn } from './index';
 
 export interface WalletClassificationInputs {
   isRoot?: boolean;
@@ -55,7 +56,6 @@ export function classifyWallet(inputs: WalletClassificationInputs): WalletCatego
 
   return 'intermediary';
 }
-import { EthereumProvider, NormalizedTx, checksumAddress, VaspLookupFn } from './index';
 
 export const TREE_TRACER_CONFIG = {
   MAX_DEPTH: 5,
@@ -104,6 +104,7 @@ export async function traceWalletTree(
   const rootAddr = checksumAddress(startAddress);
   const rootKey = rootAddr.toLowerCase();
 
+  const ethPriceUsd = await getLiveEthPriceUsd();
   let crimeTimestamp: string | undefined = undefined;
   let rootTaintUsd: number = victimAmountUsdInput || 0;
   let activeTargetAsset = targetAsset;
@@ -124,7 +125,7 @@ export async function traceWalletTree(
     const victimTx = allTxMap.get(victimTxHash.toLowerCase().trim());
     if (victimTx) {
       crimeTimestamp = victimTx.timestamp;
-      rootTaintUsd = victimTx.usdValue || victimTx.tokenAmount || (victimTx.amountEth * 3000) || rootTaintUsd;
+      rootTaintUsd = victimTx.usdValue || victimTx.tokenAmount || (victimTx.amountEth * ethPriceUsd) || rootTaintUsd;
       if (!activeTargetAsset && victimTx.tokenSymbol) {
         activeTargetAsset = victimTx.tokenSymbol;
       }
@@ -265,7 +266,7 @@ export async function traceWalletTree(
         !currentItem.timestampBoundary ||
         new Date(tx.timestamp).getTime() > new Date(currentItem.timestampBoundary).getTime();
 
-      const usdVal = tx.usdValue || (tx.tokenAmount || tx.amountEth * 3000);
+      const usdVal = tx.usdValue || (tx.tokenAmount || tx.amountEth * ethPriceUsd);
       const isAboveDust =
         usdVal >= TREE_TRACER_CONFIG.MIN_USD_VALUE_THRESHOLD ||
         tx.amountEth >= TREE_TRACER_CONFIG.MIN_ETH_VALUE_THRESHOLD;
@@ -307,7 +308,7 @@ export async function traceWalletTree(
 
     // At root node level, if rootTaintUsd was 0, sum all outgoing candidate transfers
     if (currentItem.depth === 0 && rootTaintUsd === 0) {
-      const outgoingSum = selectedBranches.reduce((sum, tx) => sum + (tx.usdValue || tx.amountEth * 3000), 0);
+      const outgoingSum = selectedBranches.reduce((sum, tx) => sum + (tx.usdValue || tx.amountEth * ethPriceUsd), 0);
       rootTaintUsd = outgoingSum > 0 ? outgoingSum : 1000;
       if (currentNode) {
         currentNode.taintedAmountUsd = rootTaintUsd;

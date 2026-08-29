@@ -117,6 +117,53 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
+let cachedLiveEthPrice: { price: number; expiresAt: number } = {
+  price: 2442.0, // Live market baseline
+  expiresAt: 0,
+};
+
+/**
+ * Real-time ETH/USD price oracle with multi-source fallback (Coinbase -> Binance -> Baseline)
+ */
+export async function getLiveEthPriceUsd(): Promise<number> {
+  const now = Date.now();
+  if (cachedLiveEthPrice.expiresAt > now && cachedLiveEthPrice.price > 0) {
+    return cachedLiveEthPrice.price;
+  }
+
+  // 1. Primary: Coinbase Spot Price API (Zero auth, sub-200ms latency)
+  try {
+    const res = await fetch('https://api.coinbase.com/v2/prices/ETH-USD/spot');
+    if (res.ok) {
+      const data: any = await res.json();
+      const price = parseFloat(data?.data?.amount);
+      if (!isNaN(price) && price > 0) {
+        cachedLiveEthPrice = { price, expiresAt: now + 5 * 60 * 1000 }; // 5 min TTL
+        return price;
+      }
+    }
+  } catch (err) {
+    // Ignore and fallback
+  }
+
+  // 2. Secondary: Binance Public Ticker API
+  try {
+    const res = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT');
+    if (res.ok) {
+      const data: any = await res.json();
+      const price = parseFloat(data?.price);
+      if (!isNaN(price) && price > 0) {
+        cachedLiveEthPrice = { price, expiresAt: now + 5 * 60 * 1000 };
+        return price;
+      }
+    }
+  } catch (err) {
+    // Fallback to cached baseline
+  }
+
+  return cachedLiveEthPrice.price;
+}
+
 /**
  * EthereumProvider - Primary implementation backed by Etherscan API (Doc 03 Section 10 & Spec 08)
  */
@@ -124,12 +171,15 @@ export class EthereumProvider implements ChainProvider {
   private apiKey: string;
   private cache: Map<string, CacheEntry<any>> = new Map();
   private ttlMs: number = 10 * 60 * 1000; // 10 minutes TTL
-  private cachedEthPriceUsd: number = 3000.0; // Fallback ETH price in USD
   private lastRequestTime: number = 0;
   private minIntervalMs: number = 220; // Guarantee <= 4.5 req/sec rate limit compliance
 
   constructor(apiKey?: string) {
     this.apiKey = apiKey || process.env.ETHERSCAN_API_KEY || '';
+  }
+
+  public async getEthPriceUsd(): Promise<number> {
+    return getLiveEthPriceUsd();
   }
 
   public isValidAddress(address: string): boolean {
@@ -195,6 +245,7 @@ export class EthereumProvider implements ChainProvider {
     const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.apiKey}`;
 
     try {
+      const ethPriceUsd = await getLiveEthPriceUsd();
       const data = await this.fetchWithRetry(apiUrl);
 
       if (!data || (data.status !== '1' && data.message !== 'No transactions found')) {
@@ -210,7 +261,7 @@ export class EthereumProvider implements ChainProvider {
         const isFailed = tx.isError === '1' || tx.txreceipt_status === '0';
         const timestampIso = new Date(parseInt(tx.timeStamp, 10) * 1000).toISOString();
         const amountEth = weiToEth(tx.value);
-        const usdValue = amountEth > 0 ? parseFloat((amountEth * this.cachedEthPriceUsd).toFixed(2)) : 0;
+        const usdValue = amountEth > 0 ? parseFloat((amountEth * ethPriceUsd).toFixed(2)) : 0;
 
         return {
           txHash: tx.hash,
@@ -248,6 +299,7 @@ export class EthereumProvider implements ChainProvider {
     const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokentx&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.apiKey}`;
 
     try {
+      const ethPriceUsd = await getLiveEthPriceUsd();
       const data = await this.fetchWithRetry(apiUrl);
 
       if (!data || (data.status !== '1' && data.message !== 'No transactions found')) {
@@ -276,7 +328,7 @@ export class EthereumProvider implements ChainProvider {
           // [BUG FIX #2] amountEth = 0 for pure token transfers. usdValue = tokenAmount for stablecoins (USDT/USDC/DAI)
           const usdValue = ['USDT', 'USDC', 'DAI'].includes(trackedSymbol)
             ? tokenAmount
-            : parseFloat((tokenAmount * this.cachedEthPriceUsd).toFixed(2));
+            : parseFloat((tokenAmount * ethPriceUsd).toFixed(2));
 
           return {
             txHash: tx.hash,
@@ -318,6 +370,7 @@ export class EthereumProvider implements ChainProvider {
     const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.apiKey}`;
 
     try {
+      const ethPriceUsd = await getLiveEthPriceUsd();
       const data = await this.fetchWithRetry(apiUrl);
 
       if (!data || (data.status !== '1' && data.message !== 'No transactions found')) {
@@ -334,7 +387,7 @@ export class EthereumProvider implements ChainProvider {
         .map((tx) => {
           const timestampIso = new Date(parseInt(tx.timeStamp, 10) * 1000).toISOString();
           const amountEth = weiToEth(tx.value);
-          const usdValue = parseFloat((amountEth * this.cachedEthPriceUsd).toFixed(2));
+          const usdValue = parseFloat((amountEth * ethPriceUsd).toFixed(2));
 
           return {
             txHash: tx.hash,

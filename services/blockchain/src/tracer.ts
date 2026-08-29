@@ -1,5 +1,5 @@
 import { TraceHop, TerminalType, AssetType, InvestigationGraph, AssetSummary, HopConfidence } from '@rt-cfas/types';
-import { EthereumProvider, NormalizedTx, checksumAddress } from './index';
+import { EthereumProvider, NormalizedTx, checksumAddress, getLiveEthPriceUsd } from './index';
 
 export interface TraceResult {
   hops: TraceHop[];
@@ -24,6 +24,7 @@ export async function scanWalletAssets(
   provider: EthereumProvider
 ): Promise<AssetSummary[]> {
   const normalizedAddr = checksumAddress(walletAddress);
+  const ethPriceUsd = await getLiveEthPriceUsd();
 
   const [ethTxs, tokenTxs, internalTxs] = await Promise.all([
     provider.getTransactions(normalizedAddr),
@@ -45,7 +46,7 @@ export async function scanWalletAssets(
     if (!tx.toAddress) continue;
 
     const symbol: AssetType = tx.tokenSymbol || 'ETH';
-    const usdVal = tx.usdValue || (tx.amountEth ? tx.amountEth * 3000 : 0);
+    const usdVal = tx.usdValue || (tx.amountEth ? tx.amountEth * ethPriceUsd : 0);
     const tokenVal = tx.tokenAmount || tx.amountEth || 0;
 
     if (usdVal <= 0 && tokenVal <= 0) continue;
@@ -96,6 +97,7 @@ export async function traceWalletHops(
   let crimeTimestamp: string | undefined = undefined;
   let currentTaintedUsd: number | undefined = undefined;
   let activeTargetAsset = targetAsset;
+  const ethPriceUsd = await getLiveEthPriceUsd();
 
   // 1. Fetch victim transaction reference if provided (Anchor Fetch)
   if (victimTxHash) {
@@ -113,7 +115,7 @@ export async function traceWalletHops(
     const victimTx = allTxMap.get(victimTxHash.toLowerCase().trim());
     if (victimTx) {
       crimeTimestamp = victimTx.timestamp;
-      currentTaintedUsd = victimTx.usdValue || (victimTx.tokenAmount || victimTx.amountEth * 3000);
+      currentTaintedUsd = victimTx.usdValue || (victimTx.tokenAmount || victimTx.amountEth * ethPriceUsd);
       if (!activeTargetAsset && victimTx.tokenSymbol) {
         activeTargetAsset = victimTx.tokenSymbol;
       }
