@@ -296,7 +296,7 @@ export async function traceWalletTree(
         exchangeName: undefined,
         initialTaintedAmountUsd: currentItem.initialBranchTaintUsd,
         finalAmountUsd: currentItem.currentTaintUsd,
-        taintPercentage: parseFloat(((currentItem.currentTaintUsd / rootTaintUsd) * 100).toFixed(1)),
+        taintPercentage: Math.min(parseFloat(((currentItem.currentTaintUsd / (rootTaintUsd || 1)) * 100).toFixed(1)), 100.0),
         hops: currentItem.pathHops,
       });
       continue;

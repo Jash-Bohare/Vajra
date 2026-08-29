@@ -203,7 +203,13 @@ export const ResultsPage: React.FC = () => {
       <div className="card">
         <h2 style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>Interactive Fund Flow Graph Canvas (Cytoscape.js)</h2>
         {data.graph ? (
-          <GraphVisualizer graph={data.graph} rootWalletAddress={data.walletAddress} />
+          <GraphVisualizer
+            graph={data.graph}
+            rootWalletAddress={data.walletAddress}
+            selectedBranchId={selectedBranch?.branchId}
+            selectedBranch={selectedBranch}
+            onClearBranchSelection={() => setSelectedBranch(null)}
+          />
         ) : (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Graph visualization data unavailable.</p>
         )}

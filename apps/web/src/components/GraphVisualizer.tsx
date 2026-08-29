@@ -9,6 +9,8 @@ interface GraphVisualizerProps {
   graph: InvestigationGraph;
   rootWalletAddress?: string;
   selectedBranchId?: string;
+  selectedBranch?: any;
+  onClearBranchSelection?: () => void;
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
@@ -20,7 +22,13 @@ const CATEGORY_CONFIG: Record<string, { label: string; bg: string; color: string
   unknown:      { label: '❓ Unknown',            bg: '#0f172a', color: '#94a3b8' },
 };
 
-export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWalletAddress }) => {
+export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
+  graph,
+  rootWalletAddress,
+  selectedBranchId,
+  selectedBranch,
+  onClearBranchSelection,
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const [selectedNode, setSelectedNode] = useState<{
@@ -35,6 +43,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
   } | null>(null);
   const [layoutMode, setLayoutMode] = useState<'breadthfirst' | 'dagre'>('breadthfirst');
 
+  // Initialize Cytoscape
   useEffect(() => {
     if (!containerRef.current || !graph) return;
 
@@ -99,7 +108,15 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
       }
       cyElements.push({
         group: 'edges',
-        data: { id: 'edge_' + index, source: edge.from, target: edge.to, label: edgeLabel, txHash: edge.txHash },
+        data: {
+          id: 'edge_' + index,
+          source: edge.from,
+          target: edge.to,
+          label: edgeLabel,
+          txHash: edge.txHash,
+          fromAddr: edge.from.toLowerCase(),
+          toAddr: edge.to.toLowerCase(),
+        },
       });
     });
 
@@ -124,6 +141,7 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
             width: 40,
             height: 40,
             'border-width': 3,
+            transition: 'opacity 0.3s ease, border-width 0.3s ease',
           } as any,
         },
         { selector: 'node[walletCategory = "root"]',         style: { 'background-color': '#451a1a', 'border-color': '#ef4444', 'border-width': 3, width: 46, height: 46 } as any },
@@ -148,9 +166,47 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
             'text-background-opacity': 0.85,
             'text-background-padding': '2px',
             'text-background-shape': 'roundrectangle',
+            transition: 'opacity 0.3s ease, width 0.3s ease',
           } as any,
         },
         { selector: ':selected', style: { 'border-color': '#facc15', 'border-width': 5, 'border-opacity': 1 } as any },
+        // Focused branch highlights
+        {
+          selector: 'node.branch-highlighted',
+          style: {
+            opacity: 1.0,
+            'border-width': 4,
+            'z-index': 100,
+          } as any,
+        },
+        {
+          selector: 'edge.branch-highlighted',
+          style: {
+            opacity: 1.0,
+            width: 4,
+            'line-color': '#38bdf8',
+            'target-arrow-color': '#38bdf8',
+            'z-index': 100,
+            color: '#7dd3fc',
+            'font-weight': 'bold',
+          } as any,
+        },
+        // Dimmed / blurred non-focused branches
+        {
+          selector: '.dimmed',
+          style: {
+            opacity: 0.15,
+            'text-opacity': 0.15,
+          } as any,
+        },
+        {
+          selector: 'edge.dimmed',
+          style: {
+            opacity: 0.1,
+            'line-opacity': 0.1,
+            'text-opacity': 0.1,
+          } as any,
+        },
       ],
       layout: (layoutMode === 'breadthfirst'
         ? { name: 'breadthfirst', directed: true, padding: 40, spacingFactor: 1.3, avoidOverlap: true }
@@ -176,6 +232,56 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
     return () => { cy.destroy(); };
   }, [graph, rootWalletAddress, layoutMode]);
 
+  // Handle Branch Focus & Background Blur
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+
+    if (!selectedBranch || !selectedBranch.hops || selectedBranch.hops.length === 0) {
+      // Clear all focus / dimming classes
+      cy.batch(() => {
+        cy.elements().removeClass('dimmed branch-highlighted');
+      });
+      return;
+    }
+
+    const branchHops = selectedBranch.hops || [];
+    const activeAddrs = new Set<string>();
+    const activeTxHashes = new Set<string>();
+
+    if (rootWalletAddress) {
+      activeAddrs.add(rootWalletAddress.toLowerCase());
+    }
+
+    branchHops.forEach((h: any) => {
+      const from = (h.fromAddress || '').toLowerCase();
+      const to = (h.toAddress || '').toLowerCase();
+      if (from) activeAddrs.add(from);
+      if (to) activeAddrs.add(to);
+      if (h.txHash) activeTxHashes.add(h.txHash.toLowerCase());
+    });
+
+    cy.batch(() => {
+      cy.nodes().forEach((node) => {
+        const fullAddr = (node.data('fullAddress') || node.id() || '').toLowerCase();
+        if (activeAddrs.has(fullAddr)) {
+          node.removeClass('dimmed').addClass('branch-highlighted');
+        } else {
+          node.removeClass('branch-highlighted').addClass('dimmed');
+        }
+      });
+
+      cy.edges().forEach((edge) => {
+        const edgeTx = (edge.data('txHash') || '').toLowerCase();
+        if (activeTxHashes.has(edgeTx)) {
+          edge.removeClass('dimmed').addClass('branch-highlighted');
+        } else {
+          edge.removeClass('branch-highlighted').addClass('dimmed');
+        }
+      });
+    });
+  }, [selectedBranch, selectedBranchId, rootWalletAddress]);
+
   const handleFit = () => { if (cyRef.current) { cyRef.current.fit(); cyRef.current.center(); } };
 
   const selCat = selectedNode
@@ -185,6 +291,49 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({ graph, rootWal
 
   return (
     <div style={{ width: '100%' }}>
+      {/* Branch Active Filter Banner above Graph */}
+      {selectedBranch && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: 'linear-gradient(90deg, #1e293b, #0f172a)',
+            padding: '0.5rem 0.8rem',
+            borderRadius: '6px',
+            marginBottom: '0.6rem',
+            border: '1px solid #38bdf8',
+            fontSize: '0.82rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ color: '#38bdf8', fontWeight: 700 }}>
+              🌿 Highlighting {selectedBranch.branchId}
+            </span>
+            <span style={{ color: 'var(--text-muted)' }}>
+              ({selectedBranch.hopCount} hops  •  {selectedBranch.taintPercentage}% taint share  •  Other branches dimmed)
+            </span>
+          </div>
+          {onClearBranchSelection && (
+            <button
+              onClick={onClearBranchSelection}
+              style={{
+                background: '#334155',
+                color: '#fff',
+                border: 'none',
+                padding: '0.25rem 0.6rem',
+                borderRadius: '4px',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              ✕ Show All Graph Paths
+            </button>
+          )}
+        </div>
+      )}
+
       <div style={{ position: 'relative', width: '100%' }}>
         <div
           ref={containerRef}
