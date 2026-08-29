@@ -1,13 +1,13 @@
 # Real-Time Crypto Fraud Attribution System (RT-CFAS)
-### SIH 2026 | Ministry of Home Affairs (MHA) | Vajra LEA Edition v1
+### Ministry of Home Affairs (MHA) | Indian Cyber Crime Coordination Centre (I4C) | Vajra LEA Edition
 
-RT-CFAS (Vajra) is an automated blockchain intelligence and VASP (Virtual Asset Service Provider) attribution platform designed for law enforcement agencies (LEAs). It automatically traces victim-reported suspect cryptocurrency wallet addresses, identifies receiving exchanges/VASPs, computes explainable risk indicators, performs multi-asset token intelligence (USDT, USDC, DAI, WETH, ETH), applies decaying taint tracking, and generates standardized legal investigation reports.
+RT-CFAS (Vajra) is an automated blockchain forensic intelligence and VASP (Virtual Asset Service Provider) attribution platform designed for law enforcement agencies (LEAs) and cyber fraud investigators. It automatically traces victim-reported suspect cryptocurrency wallet addresses, identifies receiving exchanges/VASPs, computes explainable risk indicators, performs multi-asset token intelligence (ETH, USDT, USDC, DAI, WETH), applies decaying taint tracking, and generates standardized legal investigation reports with Section 65B forensic certificates.
 
 ---
 
-## 🏗️ Repository Architecture
+## Repository Architecture
 
-This repository is structured as a monorepo (Doc 03 Section 2 & Doc 06 Section 1):
+This repository is structured as a modular TypeScript + Python monorepo:
 
 ```
 /apps
@@ -15,25 +15,54 @@ This repository is structured as a monorepo (Doc 03 Section 2 & Doc 06 Section 1
   /api              → Node.js + Express + TypeScript backend orchestrator (Port 3001)
 
 /services
-  /blockchain       → In-process TypeScript library with ChainProvider, token tracer & TLFT engine (used by apps/api)
-  /risk             → Python + FastAPI risk-scoring microservice & DEX whitelist rules (Port 8000)
+  /blockchain       → In-process TypeScript library with ChainProvider, token tracer & BFS tree engine
+  /risk             → Python + FastAPI risk-scoring microservice & heuristic rules (Port 8000)
 
 /packages
   /types            → Shared TypeScript types & API contracts (@rt-cfas/types)
   /config           → Shared environment variable schemas (@rt-cfas/config)
 
 /data
-  /vasp-addresses   → Curated dataset (60 verified exchange deposit addresses) + Postgres schema & import script
+  /vasp-addresses   → Verified exchange deposit catalog + PostgreSQL schema & import scripts
   test_consistency.js → Automated cold-vs-warm cache consistency test suite
 
-/ml                 → v2 roadmap placeholder documentation
+/ml                 → AI/ML training infrastructure blueprint & dataset specs (Phase E3)
 
-/Specs              → Project specifications & extension specs (Docs 01–08)
+/Specs              → Project specifications & extension specs (Docs 01–10)
 ```
 
 ---
 
-## ⚡ Prerequisites
+## Key Capabilities
+
+1. **Automated 2-Stage Asset-Gated Flow**:
+   - As soon as a suspect wallet address is entered or selected, an automatic debounced on-chain asset scan runs in the background.
+   - The engine discovers currency holdings (ETH, USDT, USDC, DAI), presents interactive token cards, and unlocks the targeted trace.
+
+2. **Multi-Branch BFS Decaying Taint Tracing Engine**:
+   - Traces complex multi-hop fund flows across parallel dispersion paths (Fan-Out), consolidation paths (Fan-In), and peel chains up to 5 hops deep.
+   - Computes **Cumulative Root Taint Share (%)** on each edge to maintain strict mathematical conservation of the victim's initial loss.
+
+3. **Temporal Gating & Victim FIR Anchor**:
+   - Investigators can provide a **Victim Tx Hash Reference** to lock the tracer to post-crime transfers (`timestamp > T_crime`), eliminating noise from unrelated prior transfers.
+
+4. **Automated VASP Attribution & Immediate Freeze Intelligence**:
+   - Matches terminal deposit wallets against cataloged exchange addresses (Binance, OKX, Coinbase, Kraken, Gate.io, Bybit, KuCoin, Bitstamp, Gemini, Crypto.com).
+   - Generates instant exchange-specific **Law Enforcement Subpoena & Preservation Notices**, official LEA contact points, jurisdiction details, and average turnaround times.
+
+5. **Immutable Historical Snapshot Persistence**:
+   - Every completed investigation stores a frozen JSONB snapshot in PostgreSQL (`tree_payload`, `graph_payload`, `eth_price_usd`, `risk_score`, `risk_indicators`, `assets_detected`).
+   - Viewing past reports from **Session History** displays the exact point-in-time graph and frozen oracle exchange rates without modifying or recomputing historical findings.
+
+6. **Court-Admissible Legal PDF Dossier (Section 65B Certificate)**:
+   - One-click export of an official investigation dossier featuring case metadata, hop breakdown table, risk indicators, and an **Indian Evidence Act Section 65B Electronic Evidence Certificate**.
+
+7. **Rate-Limit Serialized Request Queue**:
+   - Outgoing blockchain queries across all tree branches are automatically throttled via an internal promise queue (260ms spacing), guaranteeing compliance with public API rate limits.
+
+---
+
+## Prerequisites
 
 Ensure your machine has the following installed:
 - **Node.js**: `v20.x` or later (`node -v`)
@@ -43,9 +72,7 @@ Ensure your machine has the following installed:
 
 ---
 
-## 🚀 Step-by-Step Local Setup Guide
-
-Follow these steps to get all three services running locally on your computer in under 15 minutes.
+## Step-by-Step Local Setup Guide
 
 ### 1. Clone the Repository
 ```bash
@@ -69,7 +96,7 @@ cp .env.example apps/api/.env
 ```
 
 Ensure `.env` contains:
-- `DATABASE_URL`: Connection string for Supabase PostgreSQL.
+- `DATABASE_URL`: Connection string for PostgreSQL database.
 - `ETHERSCAN_API_KEY`: Etherscan API key for live on-chain queries.
 
 ### 3. Install Monorepo Node Dependencies
@@ -106,7 +133,7 @@ npm run build
 
 ---
 
-## 🏃 Running the Services Locally
+## Running the Services Locally
 
 Open **3 separate terminal tabs** to run the services in development mode:
 
@@ -141,32 +168,28 @@ npm run dev:web
 
 ---
 
-## 🧪 Testing & Verification Suite
+## Testing & Verification Suite
 
-### 1. Run Python Risk Microservice Pytest Suite (6/6 Passing Tests)
-To run the Phase 4 & Phase E1 DEX whitelist risk scoring engine unit tests:
+### 1. Run Python Risk Microservice Pytest Suite
 ```powershell
 cd services/risk
 .\.venv\Scripts\pytest tests/test_rules.py
 ```
-*(Expected output: `6 passed in 0.17s` covering Rapid Forwarding, Peeling Chain, DEX Router Whitelist, Burner Wallet, Unresolved Trail, and Low Risk baseline)*
+*(Verifies rapid forwarding, peeling chain, DEX whitelist, burner wallet, and baseline risk rules)*
 
-### 2. Run Multi-Branch Tree Tracer Engine Unit Test Suite (Phase E2)
-To run the BFS multi-branch graph traversal, fan-in taint accumulation, and circuit breaker unit tests:
+### 2. Run Multi-Branch Tree Tracer Engine Unit Tests
 ```bash
 node services/blockchain/dist/treeTracer.test.js
 ```
-*(Expected output: `Fan-Out Multi-Branch Traversal` and `Fan-In Taint Accumulation ($9000 accumulated, isFanIn=true)` both PASSED)*
+*(Verifies BFS multi-branch traversal, fan-in taint accumulation, and circuit breakers)*
 
-### 3. Run Automated Graph & TLFT Engine Unit Test Suite
-To run the graph generator & victim reference assertion tests:
+### 3. Run Automated Graph & TLFT Engine Unit Tests
 ```bash
 node services/blockchain/dist/tracer.test.js
 ```
-*(Expected output: 5 passed tests verifying exchange-matched, inconclusive, zero-hop, multi-asset token, and TLFT decaying taint graph schemas)*
+*(Verifies exchange-matched, inconclusive, multi-asset token, and TLFT decaying taint graph schemas)*
 
 ### 4. Run Cold vs Warm Consistency Suite
-To run the 100% deterministic consistency test across cold and warm cache runs:
 ```bash
 node data/test_consistency.js
 ```
@@ -174,37 +197,26 @@ node data/test_consistency.js
 ### 5. Browser UI Test (Full Investigator Journey)
 1. Open **[http://localhost:5173](http://localhost:5173)** in your browser.
 2. Click one of the quick-select preset test wallet buttons:
-   - **⌛ Fan-In Hourglass Splitting (USDT)**: `0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918` *(Phase E2)*
-   - **🌳 Multi-Branch Fan-Out Splitting (USDC)**: `0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6` *(Phase E2)*
-   - **🟢 USDT Transfer Trail (999 USDT)**: `0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1`
-   - **⚙️ DEX Routing Obfuscation (Uniswap)**: `0x2ea1a2b899dbc43f1c61c78a634817ef90ba1eca`
-   - **🟣 Coinbase Trail (10.99 ETH)**: `0x53ef6da5fc74cdef214367240b0d96c34231258d`
-   - **🟡 Binance Deposit Trail (0.05 ETH)**: `0x6f2d8b347dbfa187d1313338e0ff0120ca26a829`
-3. Notice **Step 1 Pre-Scan**: Automatically previews all outgoing currencies on-chain (`USDT`, `USDC`, `ETH`, `DAI`).
-4. Select target currency and click **Run Targeted Investigation**.
-5. View live results:
-   - **Multi-Branch Tree Topology**: Renders `BranchSummaryCard` displaying all independent branches, hop counts, terminal status badges, and taint share bars.
-   - **Cytoscape.js Tree Graph**: Layout toggle (`Tree Layout (BF)` vs `Horizontal DAG`), color-coded nodes (Root: Red, Exchange: Green, Fan-Out: Purple, Fan-In: Indigo), and taint % edge labels.
-   - **Explainable Risk Assessment**: Gated tree topology rules (`fan_in_aggregation`, `fan_out_splitting`, `multi_vasp_deposit`).
-   - **Download Legal PDF Report**: Click **"📄 Download Legal PDF Report"** to export an official PDF investigation report including Section 4 Multi-Branch Tree Topology Summary & Taint Statement.
+   - **11-Node Multi-Hop Trail (Binance)**: `0x0d694430b5e34d65aa04a23d38b74c9f4f60342b`
+   - **USDT Transfer Trail (999 USDT)**: `0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1`
+   - **DEX Routing Obfuscation (Uniswap)**: `0x2ea1a2b899dbc43f1c61c78a634817ef90ba1eca`
+   - **Coinbase Deposit Trail (10.99 ETH)**: `0x53ef6da5fc74cdef214367240b0d96c34231258d`
+   - **Binance Direct Trail (0.05 ETH)**: `0x6f2d8b347dbfa187d1313338e0ff0120ca26a829`
+   - **Multi-Branch Fan-Out (USDC)**: `0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6`
+   - **Fan-In Hourglass Splitting (USDT)**: `0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918`
+3. Notice automatic background pre-scan discovers token holdings and unlocks **Run Targeted Investigation**.
+4. View live results:
+   - **Multi-Branch Tree Topology**: Filterable branch summaries with taint coverage bars.
+   - **Interactive Cytoscape Graph Canvas**: Forwarding velocity badges, terminal exchange badges, and edge taint share percentages.
+   - **Actionable Intelligence Card**: Pre-filled legal preservation notice for matched exchange.
+   - **Download Legal PDF Report**: Court-admissible dossier with Section 65B Indian Evidence Act certificate.
+5. Check **Session History** (`/history`) to verify immutable historical replay with frozen timestamps and oracle exchange rates.
 
 ---
 
-## 🗄️ Database Setup & VASP Seeding (PostgreSQL)
+## Documentation & Specifications
 
-When connecting to Supabase / Neon / Local PostgreSQL:
-
-1. Run the DDL migration script in `data/vasp-addresses/schema.sql` against your database.
-2. Seed the verified exchange deposit addresses into PostgreSQL:
-```bash
-npm run db:seed
-```
-
----
-
-## 📚 Documentation & Specifications
-
-For detailed architectural guidelines and rules, read the files in the [`/Specs`](./Specs) folder:
+For detailed architectural guidelines, read the specifications in the [`/Specs`](./Specs) folder:
 - [01 — Product & Business Specification](./Specs/01_Product_Business_Specification.md)
 - [02 — UX & Requirements Specification](./Specs/02_Product_Requirements_UX_Specification.md)
 - [03 — Technical Architecture Specification](./Specs/03_Technical_Architecture_Engineering_Specification.md)
