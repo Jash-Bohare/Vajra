@@ -95,9 +95,24 @@ cp .env.example .env
 cp .env.example apps/api/.env
 ```
 
-Ensure `.env` contains:
-- `DATABASE_URL`: Connection string for PostgreSQL database.
-- `ETHERSCAN_API_KEY`: Etherscan API key for live on-chain queries.
+#### Where to Obtain Required API Keys & Services:
+
+1. **Etherscan API Key (`ETHERSCAN_API_KEY`)**:
+   - Register for a free account at [Etherscan.io](https://etherscan.io/register).
+   - Navigate to [API Keys Dashboard](https://etherscan.io/myapikey).
+   - Click **+ Add** to generate a free API key (Free tier: 5 requests/second, 100,000 requests/day).
+
+2. **Supabase PostgreSQL Database (`DATABASE_URL`)**:
+   - Register for a free account at [Supabase.com](https://supabase.com).
+   - Create a new project (e.g., `vajra-db`).
+   - Go to **Project Settings** -> **Database** -> **Connection string** -> select **URI** (or Transaction Pooler).
+   - Format: `postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres` (or `postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres`).
+
+3. **Google Gemini API Key (`GEMINI_API_KEY`)** *(For Phase E3 AI Narrative)*:
+   - Generate a free API key at [Google AI Studio](https://aistudio.google.com/app/apikey).
+   - Free tier includes 1,500 requests/day (no credit card required).
+
+---
 
 ### 3. Install Monorepo Node Dependencies
 At the root of the repository, run:
@@ -105,7 +120,22 @@ At the root of the repository, run:
 npm install
 ```
 
-### 4. Setup Python Risk Microservice
+### 4. Database Setup & VASP Address Seeding
+RT-CFAS uses PostgreSQL (hosted on [Supabase](https://supabase.com) or local Postgres) for investigation history and VASP matching.
+
+1. **Initialize Database Schema**:
+   - Open your [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql) (or PostgreSQL client).
+   - Copy and execute the schema script located at [`data/vasp-addresses/schema.sql`](data/vasp-addresses/schema.sql).
+   - This creates `investigations`, `trace_hops`, and `known_exchange_addresses` tables with optimized indexes.
+
+2. **Seed Known VASP / Exchange Deposit Addresses**:
+   Import known exchange addresses into your Supabase database by running:
+   ```bash
+   npm run db:seed
+   ```
+   *(Loads cataloged exchange deposit addresses for Binance, OKX, Coinbase, Kraken, Gate.io, KuCoin, Huobi, etc. into the database)*
+
+### 5. Setup Python Risk Microservice
 Navigate to `services/risk`, create a virtual environment, and install dependencies:
 
 **Windows (PowerShell):**
@@ -125,7 +155,7 @@ pip install -r requirements.txt
 cd ../..
 ```
 
-### 5. Build Monorepo TypeScript Packages
+### 6. Build Monorepo TypeScript Packages
 Compile `@rt-cfas/types`, `@rt-cfas/config`, `@rt-cfas/blockchain`, `@rt-cfas/api`, and `@rt-cfas/web`:
 ```bash
 npm run build
