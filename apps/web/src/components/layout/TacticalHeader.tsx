@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../../context/ThemeContext';
 
 interface TacticalHeaderProps {
   onQuickScan?: (query: string) => void;
@@ -7,6 +8,7 @@ interface TacticalHeaderProps {
 
 export const TacticalHeader: React.FC<TacticalHeaderProps> = ({ onQuickScan }) => {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
   const [quickInput, setQuickInput] = useState('');
   const [utcTime, setUtcTime] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -116,8 +118,8 @@ export const TacticalHeader: React.FC<TacticalHeaderProps> = ({ onQuickScan }) =
         right: 0,
         height: '64px',
         zIndex: 50,
-        backgroundColor: '#ffffff',
-        borderBottom: '1px solid #c6c6cd',
+        backgroundColor: theme === 'dark' ? '#0e131c' : '#ffffff',
+        borderBottom: theme === 'dark' ? '1px solid #1e293b' : '1px solid #c6c6cd',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -352,10 +354,37 @@ export const TacticalHeader: React.FC<TacticalHeaderProps> = ({ onQuickScan }) =
           <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#ba1a1a' }}>
             lock
           </span>
-          <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#0b1c30', textTransform: 'uppercase' }}>
+          <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: theme === 'dark' ? '#f1f5f9' : '#0b1c30', textTransform: 'uppercase' }}>
             SEC 65B EVIDENCE: LOCKED
           </span>
         </div>
+
+        {/* Theme Toggle Button */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 12px',
+            backgroundColor: theme === 'dark' ? '#1c2738' : '#eff4ff',
+            border: `1px solid ${theme === 'dark' ? '#334155' : '#c6c6cd'}`,
+            borderRadius: '4px',
+            color: theme === 'dark' ? '#f1f5f9' : '#0b1c30',
+            cursor: 'pointer',
+            fontFamily: 'JetBrains Mono',
+            fontSize: '11px',
+            fontWeight: 700,
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '16px', color: theme === 'dark' ? '#f59e0b' : '#006780' }}>
+            {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+          </span>
+          <span>{theme === 'dark' ? 'LIGHT' : 'DARK'}</span>
+        </button>
 
         {/* Investigator ID Profile */}
         <div
@@ -364,14 +393,14 @@ export const TacticalHeader: React.FC<TacticalHeaderProps> = ({ onQuickScan }) =
             alignItems: 'center',
             gap: '10px',
             paddingLeft: '14px',
-            borderLeft: '1px solid #c6c6cd',
+            borderLeft: `1px solid ${theme === 'dark' ? '#334155' : '#c6c6cd'}`,
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
-            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '12px', fontWeight: 600, color: '#0b1c30' }}>
+            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '12px', fontWeight: 600, color: theme === 'dark' ? '#f1f5f9' : '#0b1c30' }}>
               INV-7809
             </span>
-            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', color: '#76777d' }}>
+            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', color: theme === 'dark' ? '#94a3b8' : '#76777d' }}>
               NCB-DELHI CYBER
             </span>
           </div>
@@ -380,7 +409,7 @@ export const TacticalHeader: React.FC<TacticalHeaderProps> = ({ onQuickScan }) =
               width: '32px',
               height: '32px',
               borderRadius: '50%',
-              backgroundColor: '#000000',
+              backgroundColor: theme === 'dark' ? '#1e293b' : '#000000',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

@@ -1103,8 +1103,10 @@ export const AttributionTerminal: React.FC = () => {
             {viewMode === 'tree' ? (
               <div style={{ width: '100%', margin: '6px 0', zIndex: 10 }}>
                 <ForensicTreeGraph
+                  tree={data?.tree}
+                  graph={data?.graph}
                   hops={rawHops}
-                  rootAddress={hopsList[0]?.fullAddress || data?.walletAddress || targetInput || DEFAULT_TARGET_WALLET}
+                  rootAddress={data?.walletAddress || data?.tree?.rootAddress || targetInput || DEFAULT_TARGET_WALLET}
                   terminalExchange={data?.terminalExchange}
                   terminalType={data?.terminalType}
                   ethPriceUsd={ethRate}
@@ -1626,7 +1628,7 @@ export const AttributionTerminal: React.FC = () => {
         isOpen={subpoenaOpen}
         onClose={() => setSubpoenaOpen(false)}
         exchangeName={terminalExName}
-        walletAddress={hopsList[0]?.fullAddress || data?.walletAddress || DEFAULT_TARGET_WALLET}
+        walletAddress={data?.walletAddress || targetInput || DEFAULT_TARGET_WALLET}
         terminalAddress={hopsList[hopsList.length - 1]?.fullAddress || data?.terminalAddress || '0x0000000000000000000000000000000000000000'}
         victimTxHash={data?.victimTxHash}
         trackedLossUsd={totalLossUsd}

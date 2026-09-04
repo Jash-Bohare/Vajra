@@ -1,11 +1,11 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AttributionTerminal } from './pages/AttributionTerminal';
 import { HomePage } from './pages/HomePage';
 import { HistoryPage } from './pages/HistoryPage';
 import { TacticalHeader } from './components/layout/TacticalHeader';
 import { TacticalSidebar } from './components/layout/TacticalSidebar';
-import { useSearchParams } from 'react-router-dom';
 
 const RootRoute: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -18,29 +18,56 @@ const RootRoute: React.FC = () => {
   return <HomePage />;
 };
 
-export const App: React.FC = () => {
+const AppLayout: React.FC = () => {
+  const { theme } = useTheme();
+
   return (
-    <Router>
-      <div style={{ minHeight: '100vh', backgroundColor: '#f8f9ff', color: '#0b1c30' }}>
-        <TacticalHeader />
+    <div
+      style={{
+        minHeight: '100vh',
+        backgroundColor: theme === 'dark' ? '#080b10' : '#f8f9ff',
+        color: theme === 'dark' ? '#f1f5f9' : '#0b1c30',
+        transition: 'background-color 0.2s ease, color 0.2s ease',
+      }}
+    >
+      <TacticalHeader />
 
-        <div style={{ display: 'flex', paddingTop: '64px', minHeight: 'calc(100vh - 64px)' }}>
-          <TacticalSidebar />
+      <div style={{ display: 'flex', paddingTop: '64px', minHeight: 'calc(100vh - 64px)' }}>
+        <TacticalSidebar />
 
-          <main style={{ flex: 1, marginLeft: '256px', padding: '16px 24px', minWidth: 0 }}>
-            <Routes>
-              <Route path="/" element={<RootRoute />} />
-              <Route path="/terminal" element={<AttributionTerminal />} />
-              <Route path="/investigations/:id/progress" element={<AttributionTerminal />} />
-              <Route path="/investigations/:id" element={<AttributionTerminal />} />
-              <Route path="/history" element={<HistoryPage />} />
-              <Route path="/dossier" element={<HistoryPage />} />
-              <Route path="/vasp-registry" element={<HistoryPage />} />
-              <Route path="/ledger" element={<HistoryPage />} />
-            </Routes>
-          </main>
-        </div>
+        <main
+          style={{
+            flex: 1,
+            marginLeft: '256px',
+            padding: '16px 24px',
+            minWidth: 0,
+            backgroundColor: theme === 'dark' ? '#080b10' : '#f8f9ff',
+          }}
+        >
+          <Routes>
+            <Route path="/" element={<RootRoute />} />
+            <Route path="/terminal" element={<AttributionTerminal />} />
+            <Route path="/investigations/:id/progress" element={<AttributionTerminal />} />
+            <Route path="/investigations/:id" element={<AttributionTerminal />} />
+            <Route path="/history" element={<HistoryPage />} />
+            {/* Redirect legacy redundant routes to /history */}
+            <Route path="/dossier" element={<Navigate to="/history" replace />} />
+            <Route path="/vasp-registry" element={<Navigate to="/history" replace />} />
+            <Route path="/ledger" element={<Navigate to="/history" replace />} />
+          </Routes>
+        </main>
       </div>
-    </Router>
+    </div>
   );
 };
+
+export const App: React.FC = () => {
+  return (
+    <ThemeProvider>
+      <Router>
+        <AppLayout />
+      </Router>
+    </ThemeProvider>
+  );
+};
+
