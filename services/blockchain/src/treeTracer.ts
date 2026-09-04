@@ -478,16 +478,34 @@ export async function traceWalletTree(
     return v > 0 ? v : 1;
   }
 
+  // Recalculate true inDegree and outDegree from actual graph edges
+  const inDegMap = new Map<string, number>();
+  const outDegMap = new Map<string, number>();
+  edges.forEach((e) => {
+    const from = e.from.toLowerCase();
+    const to = e.to.toLowerCase();
+    outDegMap.set(from, (outDegMap.get(from) || 0) + 1);
+    inDegMap.set(to, (inDegMap.get(to) || 0) + 1);
+  });
+
+  visitedGlobal.forEach((node) => {
+    const key = node.id.toLowerCase();
+    node.inDegree = inDegMap.get(key) || 0;
+    node.outDegree = outDegMap.get(key) || 0;
+    node.isFanIn = node.inDegree >= 2;
+    node.isFanOut = node.outDegree >= 2;
+  });
+
   // Calculate Aggregated Metrics
   const nodesArray = Array.from(visitedGlobal.values());
   const totalBranches = branches.length;
   const exchangeBranches = branches.filter((b) => b.terminalType === 'exchange').length;
 
-  const totalTracedTaintUsd = branches.reduce((acc, b) => acc + b.finalAmountUsd, 0);
-  const taintCoveragePercent = Math.min(
-    parseFloat(((totalTracedTaintUsd / rootTaintUsd) * 100).toFixed(1)),
-    100.0
-  );
+  const totalTracedTaintUsd = branches.reduce((acc, b) => acc + (b.finalAmountUsd || 0), 0);
+  const rawCoverage = rootTaintUsd > 0 ? (totalTracedTaintUsd / rootTaintUsd) * 100 : 100.0;
+  const taintCoveragePercent = isNaN(rawCoverage)
+    ? 100.0
+    : Math.max(0, Math.min(parseFloat(rawCoverage.toFixed(1)), 100.0));
 
   const totalFanOutNodes = nodesArray.filter((n) => n.isFanOut).length;
   const totalFanInNodes = nodesArray.filter((n) => n.isFanIn).length;

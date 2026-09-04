@@ -194,6 +194,10 @@ export class EthereumProvider implements ChainProvider {
     this.apiKey = apiKey || process.env.ETHERSCAN_API_KEY || '';
   }
 
+  public getApiKey(): string {
+    return this.apiKey || process.env.ETHERSCAN_API_KEY || '';
+  }
+
   public async getEthPriceUsd(): Promise<number> {
     return getLiveEthPriceUsd();
   }
@@ -202,7 +206,7 @@ export class EthereumProvider implements ChainProvider {
    * Fetches latest block number from Etherscan proxy API
    */
   public async getLatestBlockNumber(): Promise<number> {
-    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=proxy&action=eth_blockNumber&apikey=${this.apiKey}`;
+    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=proxy&action=eth_blockNumber&apikey=${this.getApiKey()}`;
     try {
       const data = await this.fetchWithRetry(apiUrl);
       if (data && data.result) {
@@ -268,7 +272,7 @@ export class EthereumProvider implements ChainProvider {
       return cached.data;
     }
 
-    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.apiKey}`;
+    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.getApiKey()}`;
 
     try {
       const ethPriceUsd = await getLiveEthPriceUsd();
@@ -325,7 +329,7 @@ export class EthereumProvider implements ChainProvider {
       return cached.data;
     }
 
-    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokentx&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.apiKey}`;
+    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokentx&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.getApiKey()}`;
 
     try {
       const ethPriceUsd = await getLiveEthPriceUsd();
@@ -399,7 +403,7 @@ export class EthereumProvider implements ChainProvider {
       return cached.data;
     }
 
-    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.apiKey}`;
+    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.getApiKey()}`;
 
     try {
       const ethPriceUsd = await getLiveEthPriceUsd();

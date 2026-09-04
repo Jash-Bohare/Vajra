@@ -22,6 +22,8 @@ export interface AssetSummary {
   totalVolumeToken: number;
 }
 
+export type DiscoveredAsset = AssetSummary;
+
 /**
  * Graph Visualization Schema (Doc 03 Section 5 & Spec 08 & Spec 09)
  */
