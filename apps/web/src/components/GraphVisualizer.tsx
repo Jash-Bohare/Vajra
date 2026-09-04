@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import cytoscape, { Core } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import { InvestigationGraph, WalletCategory } from '@rt-cfas/types';
+import { useTheme } from '../context/ThemeContext';
 
 cytoscape.use(dagre);
 
@@ -13,13 +14,25 @@ interface GraphVisualizerProps {
   onClearBranchSelection?: () => void;
 }
 
-const CATEGORY_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-  burner:       { label: 'Burner Wallet',      bg: '#431407', color: '#f97316' },
-  intermediary: { label: 'Intermediary',        bg: '#0f172a', color: '#38bdf8' },
-  aggregator:   { label: 'Aggregator',          bg: '#1e1b4b', color: '#a855f7' },
-  exchange:     { label: 'Exchange Deposit',    bg: '#064e3b', color: '#10b981' },
-  root:         { label: 'Suspect Wallet',      bg: '#451a1a', color: '#ef4444' },
-  unknown:      { label: 'Unknown',             bg: '#0f172a', color: '#94a3b8' },
+const getCategoryConfig = (isLight: boolean): Record<string, { label: string; bg: string; color: string }> => {
+  if (isLight) {
+    return {
+      burner:       { label: 'Burner Wallet',      bg: '#fef3c7', color: '#b45309' },
+      intermediary: { label: 'Intermediary',        bg: '#e0f2fe', color: '#0369a1' },
+      aggregator:   { label: 'Aggregator',          bg: '#ede9fe', color: '#6d28d9' },
+      exchange:     { label: 'Exchange Deposit',    bg: '#d1fae5', color: '#047857' },
+      root:         { label: 'Suspect Wallet',      bg: '#fee2e2', color: '#b91c1c' },
+      unknown:      { label: 'Unknown',             bg: '#eff4ff', color: '#334155' },
+    };
+  }
+  return {
+    burner:       { label: 'Burner Wallet',      bg: '#431407', color: '#f97316' },
+    intermediary: { label: 'Intermediary',        bg: '#0f172a', color: '#38bdf8' },
+    aggregator:   { label: 'Aggregator',          bg: '#1e1b4b', color: '#a855f7' },
+    exchange:     { label: 'Exchange Deposit',    bg: '#064e3b', color: '#10b981' },
+    root:         { label: 'Suspect Wallet',      bg: '#451a1a', color: '#ef4444' },
+    unknown:      { label: 'Unknown',             bg: '#0f172a', color: '#94a3b8' },
+  };
 };
 
 export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
@@ -29,6 +42,10 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
   selectedBranch,
   onClearBranchSelection,
 }) => {
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
+  const CATEGORY_CONFIG = getCategoryConfig(isLight);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const [selectedNode, setSelectedNode] = useState<{
@@ -128,12 +145,12 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
         {
           selector: 'node',
           style: {
-            'background-color': '#0f172a',
-            'border-color': '#38bdf8',
-            color: '#f8fafc',
+            'background-color': isLight ? '#ffffff' : '#0f172a',
+            'border-color': isLight ? '#0284c7' : '#38bdf8',
+            color: isLight ? '#0b1c30' : '#f8fafc',
             label: 'data(label)',
             'font-size': '10px',
-            'font-family': 'Inter, system-ui, sans-serif',
+            'font-family': 'Space Grotesk, sans-serif',
             'text-valign': 'bottom',
             'text-halign': 'center',
             'text-margin-y': 8,
@@ -147,8 +164,8 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
         {
           selector: 'node[nodeType = "root"]',
           style: {
-            'background-color': '#451a1a',
-            'border-color': '#ef4444',
+            'background-color': isLight ? '#fee2e2' : '#451a1a',
+            'border-color': isLight ? '#dc2626' : '#ef4444',
             'border-width': 3,
             width: 44,
             height: 44,
@@ -157,8 +174,8 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
         {
           selector: 'node[nodeType = "exchange"]',
           style: {
-            'background-color': '#064e3b',
-            'border-color': '#10b981',
+            'background-color': isLight ? '#d1fae5' : '#064e3b',
+            'border-color': isLight ? '#059669' : '#10b981',
             'border-width': 3,
             width: 44,
             height: 44,
@@ -167,32 +184,35 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
         {
           selector: 'node[walletCategory = "burner"]',
           style: {
-            'background-color': '#431407',
-            'border-color': '#f97316',
+            'background-color': isLight ? '#fef3c7' : '#431407',
+            'border-color': isLight ? '#d97706' : '#f97316',
           } as any,
         },
         {
           selector: 'node[walletCategory = "aggregator"]',
           style: {
-            'background-color': '#1e1b4b',
-            'border-color': '#a855f7',
+            'background-color': isLight ? '#ede9fe' : '#1e1b4b',
+            'border-color': isLight ? '#7c3aed' : '#a855f7',
           } as any,
         },
         {
           selector: 'edge',
           style: {
             width: 2,
-            'line-color': '#0284c7',
-            'target-arrow-color': '#0284c7',
+            'line-color': isLight ? '#0284c7' : '#38bdf8',
+            'target-arrow-color': isLight ? '#0284c7' : '#38bdf8',
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
             label: 'data(label)',
             'font-size': '9px',
             'font-family': 'JetBrains Mono, monospace',
-            'text-background-color': '#090d16',
-            'text-background-opacity': 0.85,
-            'text-background-padding': '2px',
-            color: '#7dd3fc',
+            'text-background-color': isLight ? '#ffffff' : '#090d16',
+            'text-background-opacity': 0.95,
+            'text-background-padding': '3px',
+            'text-border-color': isLight ? '#cbd5e1' : '#1e293b',
+            'text-border-width': 1,
+            'text-border-opacity': 1,
+            color: isLight ? '#0369a1' : '#7dd3fc',
             'text-rotation': 'autorotate',
           } as any,
         },
@@ -203,9 +223,6 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
           style: {
             'border-width': 4,
             'border-color': '#38bdf8',
-            'shadow-blur': 15,
-            'shadow-color': '#38bdf8',
-            'shadow-opacity': 0.8,
             'z-index': 100,
           } as any,
         },
@@ -373,29 +390,64 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
         <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10, display: 'flex', gap: '0.5rem' }}>
           <button
             onClick={() => setLayoutMode(layoutMode === 'breadthfirst' ? 'dagre' : 'breadthfirst')}
-            style={{ background: '#1e293b', color: '#f8fafc', border: '1px solid #334155', padding: '0.4rem 0.8rem', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer' }}
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--border-tactical)',
+              padding: '0.4rem 0.8rem',
+              borderRadius: '4px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-headline)',
+            }}
           >
             {layoutMode === 'breadthfirst' ? 'Switch to DAG' : 'Switch to Tree'}
           </button>
           <button
             onClick={handleFit}
-            style={{ background: '#1e293b', color: '#f8fafc', border: '1px solid #334155', padding: '0.4rem 0.8rem', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer' }}
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--border-tactical)',
+              padding: '0.4rem 0.8rem',
+              borderRadius: '4px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-headline)',
+            }}
           >
             Fit Graph
           </button>
         </div>
 
         {/* Bottom-left Legend: Professional Palette */}
-        <div style={{ position: 'absolute', bottom: '10px', left: '10px', zIndex: 10, display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.75rem', background: 'rgba(15,23,42,0.95)', padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid #334155', backdropFilter: 'blur(4px)' }}>
-          <span style={{ color: '#ef4444', fontWeight: 600 }}>● Suspect Wallet</span>
-          <span style={{ color: '#64748b' }}>|</span>
-          <span style={{ color: '#10b981', fontWeight: 600 }}>● Exchange Deposit</span>
-          <span style={{ color: '#64748b' }}>|</span>
-          <span style={{ color: '#38bdf8', fontWeight: 600 }}>● Intermediary</span>
-          <span style={{ color: '#64748b' }}>|</span>
-          <span style={{ color: '#f97316', fontWeight: 600 }}>● Burner Wallet</span>
-          <span style={{ color: '#64748b' }}>|</span>
-          <span style={{ color: '#a855f7', fontWeight: 600 }}>● Aggregator</span>
+        <div style={{
+          position: 'absolute',
+          bottom: '10px',
+          left: '10px',
+          zIndex: 10,
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.5rem',
+          fontSize: '0.75rem',
+          backgroundColor: isLight ? 'rgba(255, 255, 255, 0.96)' : 'rgba(15, 23, 42, 0.95)',
+          padding: '0.45rem 0.8rem',
+          borderRadius: '4px',
+          border: '1px solid var(--border-tactical)',
+          backdropFilter: 'blur(4px)',
+          fontFamily: 'var(--font-mono)',
+        }}>
+          <span style={{ color: isLight ? '#dc2626' : '#ef4444', fontWeight: 700 }}>● Suspect Wallet</span>
+          <span style={{ color: 'var(--text-dim)' }}>|</span>
+          <span style={{ color: isLight ? '#059669' : '#10b981', fontWeight: 700 }}>● Exchange Deposit</span>
+          <span style={{ color: 'var(--text-dim)' }}>|</span>
+          <span style={{ color: isLight ? '#0284c7' : '#38bdf8', fontWeight: 700 }}>● Intermediary</span>
+          <span style={{ color: 'var(--text-dim)' }}>|</span>
+          <span style={{ color: isLight ? '#d97706' : '#f97316', fontWeight: 700 }}>● Burner Wallet</span>
+          <span style={{ color: 'var(--text-dim)' }}>|</span>
+          <span style={{ color: isLight ? '#7c3aed' : '#a855f7', fontWeight: 700 }}>● Aggregator</span>
         </div>
       </div>
 
@@ -405,16 +457,16 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
           style={{
             marginTop: '0.8rem',
             padding: '0.8rem 1.2rem',
-            background: '#090d16',
-            borderRadius: '8px',
-            border: '1px solid #334155',
+            backgroundColor: 'var(--bg-surface)',
+            borderRadius: '6px',
+            border: '1px solid var(--border-tactical)',
             display: 'flex',
             flexDirection: 'column',
             gap: '0.5rem',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>Selected Node:</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 700 }}>Selected Node:</span>
             <span
               className="code-badge"
               style={{
@@ -422,7 +474,8 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
                 color: 'var(--accent-cyan)',
                 fontFamily: 'var(--font-mono)',
                 padding: '0.2rem 0.5rem',
-                background: '#0f172a',
+                backgroundColor: 'var(--bg-surface-low)',
+                border: '1px solid var(--border-tactical)',
                 borderRadius: '4px',
               }}
             >
@@ -433,9 +486,9 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
             {selCfg && (
               <span
                 style={{
-                  background: selCfg.bg,
+                  backgroundColor: selCfg.bg,
                   color: selCfg.color,
-                  border: `1px solid ${selCfg.color}40`,
+                  border: `1px solid ${selCfg.color}60`,
                   padding: '0.2rem 0.6rem',
                   borderRadius: '4px',
                   fontSize: '0.77rem',
@@ -451,9 +504,9 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
             {selectedNode.type === 'exchange' && selectedNode.label && (
               <span
                 style={{
-                  background: '#064e3b',
-                  color: '#10b981',
-                  border: '1px solid #047857',
+                  backgroundColor: isLight ? '#d1fae5' : '#064e3b',
+                  color: isLight ? '#047857' : '#10b981',
+                  border: `1px solid ${isLight ? '#a7f3d0' : '#047857'}`,
                   padding: '0.2rem 0.6rem',
                   borderRadius: '4px',
                   fontSize: '0.77rem',
@@ -472,10 +525,11 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
                     padding: '0.2rem 0.6rem',
                     borderRadius: '4px',
                     fontSize: '0.77rem',
-                    fontWeight: 600,
+                    fontWeight: 700,
                     whiteSpace: 'nowrap',
-                    background: selectedNode.hopVelocitySec < 60 ? '#7f1d1d' : selectedNode.hopVelocitySec < 300 ? '#78350f' : '#1e293b',
-                    color: selectedNode.hopVelocitySec < 60 ? '#fca5a5' : selectedNode.hopVelocitySec < 300 ? '#fcd34d' : '#94a3b8',
+                    backgroundColor: isLight ? '#fee2e2' : '#451a1a',
+                    color: isLight ? '#dc2626' : '#fca5a5',
+                    border: `1px solid ${isLight ? '#fca5a5' : '#7f1d1d'}`,
                   }}
                 >
                   {selectedNode.hopVelocitySec < 60
@@ -490,10 +544,11 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
                     padding: '0.2rem 0.6rem',
                     borderRadius: '4px',
                     fontSize: '0.77rem',
-                    fontWeight: 600,
+                    fontWeight: 700,
                     whiteSpace: 'nowrap',
-                    background: '#451a1a',
-                    color: '#fca5a5',
+                    backgroundColor: isLight ? '#fee2e2' : '#451a1a',
+                    color: isLight ? '#dc2626' : '#fca5a5',
+                    border: `1px solid ${isLight ? '#fca5a5' : '#7f1d1d'}`,
                   }}
                 >
                   Origin Suspect Wallet
@@ -506,10 +561,19 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
                     padding: '0.2rem 0.6rem',
                     borderRadius: '4px',
                     fontSize: '0.77rem',
-                    fontWeight: 600,
+                    fontWeight: 700,
                     whiteSpace: 'nowrap',
-                    background: selectedNode.hopVelocitySec < 60 ? '#7f1d1d' : selectedNode.hopVelocitySec < 300 ? '#78350f' : '#1e293b',
-                    color: selectedNode.hopVelocitySec < 60 ? '#fca5a5' : selectedNode.hopVelocitySec < 300 ? '#fcd34d' : '#94a3b8',
+                    backgroundColor: selectedNode.hopVelocitySec < 60
+                      ? (isLight ? '#fee2e2' : '#7f1d1d')
+                      : selectedNode.hopVelocitySec < 300
+                      ? (isLight ? '#fef3c7' : '#78350f')
+                      : (isLight ? '#eff4ff' : '#1e293b'),
+                    color: selectedNode.hopVelocitySec < 60
+                      ? (isLight ? '#dc2626' : '#fca5a5')
+                      : selectedNode.hopVelocitySec < 300
+                      ? (isLight ? '#b45309' : '#fcd34d')
+                      : (isLight ? '#334155' : '#94a3b8'),
+                    border: '1px solid var(--border-tactical)',
                   }}
                 >
                   {selectedNode.hopVelocitySec < 60
@@ -524,10 +588,11 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
                     padding: '0.2rem 0.6rem',
                     borderRadius: '4px',
                     fontSize: '0.77rem',
-                    fontWeight: 600,
+                    fontWeight: 700,
                     whiteSpace: 'nowrap',
-                    background: '#1e293b',
-                    color: '#94a3b8',
+                    backgroundColor: 'var(--bg-surface-low)',
+                    color: 'var(--text-muted)',
+                    border: '1px solid var(--border-tactical)',
                   }}
                 >
                   Forwarding Intermediary
@@ -539,10 +604,11 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
                   padding: '0.2rem 0.6rem',
                   borderRadius: '4px',
                   fontSize: '0.77rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   whiteSpace: 'nowrap',
-                  background: '#064e3b',
-                  color: '#86efac',
+                  backgroundColor: isLight ? '#d1fae5' : '#064e3b',
+                  color: isLight ? '#047857' : '#86efac',
+                  border: `1px solid ${isLight ? '#a7f3d0' : '#059669'}`,
                 }}
               >
                 Terminal VASP Deposit Point
@@ -553,10 +619,11 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
                   padding: '0.2rem 0.6rem',
                   borderRadius: '4px',
                   fontSize: '0.77rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   whiteSpace: 'nowrap',
-                  background: '#1e293b',
-                  color: '#94a3b8',
+                  backgroundColor: 'var(--bg-surface-low)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border-tactical)',
                 }}
               >
                 Funds Currently Held Here
@@ -569,14 +636,14 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
               {selectedNode.taintedAmountUsd !== undefined && selectedNode.taintedAmountUsd > 0 && (
                 <span>
                   Tainted Funds:{' '}
-                  <strong style={{ color: '#10b981' }}>
+                  <strong style={{ color: isLight ? '#047857' : '#10b981' }}>
                     ${selectedNode.taintedAmountUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })} USD
                   </strong>
                 </span>
               )}
               <span>
                 Pattern:{' '}
-                <strong style={{ color: selCfg ? selCfg.color : '#94a3b8' }}>
+                <strong style={{ color: selCfg ? selCfg.color : 'var(--text-main)' }}>
                   {selectedNode.isFanOut
                     ? 'Fan-Out (Splitting)'
                     : selectedNode.isFanIn
@@ -593,9 +660,9 @@ export const GraphVisualizer: React.FC<GraphVisualizerProps> = ({
               href={'https://etherscan.io/address/' + selectedNode.id}
               target="_blank"
               rel="noreferrer"
-              style={{ color: 'var(--accent-primary)', textDecoration: 'none', fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+              style={{ color: 'var(--accent-cyan)', textDecoration: 'none', fontWeight: 700, fontSize: '0.82rem', whiteSpace: 'nowrap' }}
             >
-              View on Etherscan
+              View on Etherscan ↗
             </a>
           </div>
         </div>

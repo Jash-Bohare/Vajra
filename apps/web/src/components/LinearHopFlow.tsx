@@ -73,7 +73,6 @@ export const LinearHopFlow: React.FC<LinearHopFlowProps> = ({
           maxWidth: '680px',
           border: '2px solid var(--accent-cyan)',
           padding: '0.85rem 1rem',
-          boxShadow: '0 0 16px rgba(6, 182, 212, 0.15)',
         }}
       >
         <div
@@ -99,16 +98,16 @@ export const LinearHopFlow: React.FC<LinearHopFlowProps> = ({
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
           <div>
-            <span className="font-label-caps" style={{ color: 'var(--text-dim)', display: 'block' }}>
+            <span className="font-label-caps" style={{ color: 'var(--text-muted)', display: 'block' }}>
               ORIGIN ADDRESS
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem' }}>
-              <span className="font-mono-data-sm" style={{ color: 'var(--accent-cyan-bright)' }}>
+              <span className="font-mono-data-sm" style={{ color: 'var(--accent-cyan)' }}>
                 {formatAddr(rootAddress)}
               </span>
               <button
                 onClick={() => copyToClipboard(rootAddress, 'root')}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 0 }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}
                 title="Copy address"
               >
                 {copiedKey === 'root' ? <Check size={12} style={{ color: 'var(--success-emerald)' }} /> : <Copy size={12} />}
@@ -117,7 +116,7 @@ export const LinearHopFlow: React.FC<LinearHopFlowProps> = ({
           </div>
 
           <div>
-            <span className="font-label-caps" style={{ color: 'var(--text-dim)', display: 'block' }}>
+            <span className="font-label-caps" style={{ color: 'var(--text-muted)', display: 'block' }}>
               INITIAL SIPHON
             </span>
             <span className="font-mono-data-sm" style={{ color: 'var(--danger-crimson)', fontWeight: 700 }}>
@@ -126,7 +125,7 @@ export const LinearHopFlow: React.FC<LinearHopFlowProps> = ({
           </div>
 
           <div>
-            <span className="font-label-caps" style={{ color: 'var(--text-dim)', display: 'block' }}>
+            <span className="font-label-caps" style={{ color: 'var(--text-muted)', display: 'block' }}>
               STATUS
             </span>
             <span className="badge-tactical badge-tactical-crimson" style={{ marginTop: '0.15rem' }}>
@@ -172,7 +171,6 @@ export const LinearHopFlow: React.FC<LinearHopFlowProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.4rem',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
                 }}
               >
                 {isTerminal ? (
@@ -217,7 +215,6 @@ export const LinearHopFlow: React.FC<LinearHopFlowProps> = ({
                 border: isTerminal ? '2px solid var(--accent-cyan)' : '1px solid var(--border-tactical)',
                 padding: '0.85rem 1rem',
                 backgroundColor: isTerminal ? 'var(--bg-surface-elevated)' : 'var(--bg-surface)',
-                boxShadow: isTerminal ? '0 0 20px rgba(6, 182, 212, 0.2)' : undefined,
               }}
             >
               <div
@@ -254,16 +251,16 @@ export const LinearHopFlow: React.FC<LinearHopFlowProps> = ({
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
                 <div>
-                  <span className="font-label-caps" style={{ color: 'var(--text-dim)', display: 'block' }}>
+                  <span className="font-label-caps" style={{ color: 'var(--text-muted)', display: 'block' }}>
                     TARGET WALLET
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem' }}>
-                    <span className="font-mono-data-sm" style={{ color: 'var(--text-main)' }}>
+                    <span className="font-mono-data-sm" style={{ color: 'var(--text-main)', fontWeight: 600 }}>
                       {formatAddr(hop.toAddress)}
                     </span>
                     <button
                       onClick={() => copyToClipboard(hop.toAddress, `${copyKey}-to`)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 0 }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}
                       title="Copy address"
                     >
                       {copiedKey === `${copyKey}-to` ? (
@@ -276,7 +273,7 @@ export const LinearHopFlow: React.FC<LinearHopFlowProps> = ({
                 </div>
 
                 <div>
-                  <span className="font-label-caps" style={{ color: 'var(--text-dim)', display: 'block' }}>
+                  <span className="font-label-caps" style={{ color: 'var(--text-muted)', display: 'block' }}>
                     TRANSFERRED VOLUME
                   </span>
                   <span className="font-mono-data-sm" style={{ color: 'var(--text-main)', fontWeight: 600 }}>
@@ -286,16 +283,16 @@ export const LinearHopFlow: React.FC<LinearHopFlowProps> = ({
                 </div>
 
                 <div>
-                  <span className="font-label-caps" style={{ color: 'var(--text-dim)', display: 'block' }}>
+                  <span className="font-label-caps" style={{ color: 'var(--text-muted)', display: 'block' }}>
                     TRANSACTION HASH
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem' }}>
-                    <span className="font-mono-data-sm" style={{ color: 'var(--accent-cyan-bright)' }}>
+                    <span className="font-mono-data-sm" style={{ color: 'var(--accent-cyan)' }}>
                       {formatAddr(hop.txHash)}
                     </span>
                     <button
                       onClick={() => copyToClipboard(hop.txHash, `${copyKey}-tx`)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 0 }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}
                       title="Copy Tx Hash"
                     >
                       {copiedKey === `${copyKey}-tx` ? (

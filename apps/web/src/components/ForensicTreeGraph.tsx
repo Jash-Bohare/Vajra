@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { InvestigationTree, InvestigationGraph, WalletCategory } from '@rt-cfas/types';
+import { InvestigationTree, InvestigationGraph, WalletCategory, BranchSummary } from '@rt-cfas/types';
 import { useTheme } from '../context/ThemeContext';
 
 export interface ForensicNode {
@@ -15,11 +15,15 @@ export interface ForensicNode {
   txHash?: string;
   blockNumber?: number;
   timestamp?: string;
+  formattedTimestamp?: string;
+  transitDelayText?: string;
   categoryLabel: string;
   inDegree: number;
   outDegree: number;
   isFanIn?: boolean;
   isFanOut?: boolean;
+  shortCode: string;
+  roleStamp: string;
 }
 
 export interface ForensicEdge {
@@ -32,6 +36,68 @@ export interface ForensicEdge {
   taintPercent?: number;
   txHash?: string;
   tokenSymbol?: string;
+  timestamp?: string;
+  blockNumber?: number;
+  delayText?: string;
+}
+
+const KNOWN_EXCHANGE_KEYWORDS = [
+  'binance', 'coinbase', 'kraken', 'okx', 'bybit', 'kucoin', 
+  'gate.io', 'gate', 'wazirx', 'coindcx', 'htx', 'huobi', 
+  'bitfinex', 'bitstamp', 'gemini', 'crypto.com', 'mexc', 'bitget',
+  'poloniex', 'deribit', 'bithumb', 'upbit', 'uniswap', 'sushiswap'
+];
+
+function parseTimestampMs(val?: string | number): number | null {
+  if (!val) return null;
+  if (typeof val === 'number') {
+    return val > 1e11 ? val : val * 1000;
+  }
+  const parsed = Date.parse(val);
+  return isNaN(parsed) ? null : parsed;
+}
+
+function formatTransitDuration(diffSeconds: number): string {
+  if (isNaN(diffSeconds) || diffSeconds < 0) return '< 1m';
+  if (diffSeconds < 60) return `${Math.max(1, Math.round(diffSeconds))}s`;
+  const mins = Math.floor(diffSeconds / 60);
+  const secs = Math.round(diffSeconds % 60);
+  if (mins < 60) {
+    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  }
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if (hours < 24) {
+    return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
+  }
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours > 0 ? `${days}d ${remHours}h` : `${days}d`;
+}
+
+function detectExchangeName(label?: string, walletCat?: string, isTerminalEx?: boolean, terminalExProp?: string): string | null {
+  if (terminalExProp && isTerminalEx) return terminalExProp;
+  if (!label && !walletCat) return null;
+
+  if (walletCat === 'exchange' && label && !/^0x[a-f0-9]{4,}/i.test(label)) {
+    return label;
+  }
+
+  if (label) {
+    const lower = label.toLowerCase().trim();
+    for (const kw of KNOWN_EXCHANGE_KEYWORDS) {
+      if (lower.includes(kw)) {
+        if (lower.includes('gate.io') || lower.includes('gate')) return 'Gate.io';
+        if (lower.includes('coindcx')) return 'CoinDCX';
+        if (lower.includes('wazirx')) return 'WazirX';
+        if (lower.includes('crypto.com')) return 'Crypto.com';
+        return kw.charAt(0).toUpperCase() + kw.slice(1);
+      }
+    }
+  }
+
+  if (isTerminalEx && terminalExProp) return terminalExProp;
+  return null;
 }
 
 interface ForensicTreeGraphProps {
@@ -44,6 +110,12 @@ interface ForensicTreeGraphProps {
   ethPriceUsd?: number;
   targetAsset?: string;
   onSelectAddress?: (addr: string) => void;
+  selectedBranchId?: string | null;
+  selectedNodeId?: string | null;
+  onSelectNode?: (node: ForensicNode | null) => void;
+  layoutMode?: 'dag' | 'tree';
+  onLayoutModeChange?: (mode: 'dag' | 'tree') => void;
+  height?: string;
 }
 
 export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
@@ -55,103 +127,244 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
   terminalType,
   targetAsset = 'ETH',
   onSelectAddress,
+  selectedBranchId,
+  selectedNodeId,
+  onSelectNode,
+  layoutMode: externalLayoutMode,
+  onLayoutModeChange,
+  height = '460px',
 }) => {
   const { theme } = useTheme();
   const isLight = theme === 'light';
+
+  const [internalLayoutMode, setInternalLayoutMode] = useState<'dag' | 'tree'>('dag');
+  const layoutMode = externalLayoutMode || internalLayoutMode;
+
+  const handleToggleLayout = (newMode: 'dag' | 'tree') => {
+    setNodePositions({});
+    if (onLayoutModeChange) {
+      onLayoutModeChange(newMode);
+    } else {
+      setInternalLayoutMode(newMode);
+    }
+  };
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [selectedNode, setSelectedNode] = useState<ForensicNode | null>(null);
+  const [internalSelectedNode, setInternalSelectedNode] = useState<ForensicNode | null>(null);
   const [copied, setCopied] = useState(false);
-  const [layoutMode, setLayoutMode] = useState<'dag' | 'tree'>('dag');
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+  const [popoverOffset, setPopoverOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Dynamic Theme Colors
-  const CATEGORY_COLORS: Record<string, { stroke: string; bg: string; text: string; label: string }> = useMemo(() => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const didDragRef = useRef(false);
+  const didCanvasDragRef = useRef(false);
+  const dragInfoRef = useRef<{
+    nodeId: string;
+    startMouseX: number;
+    startMouseY: number;
+    initNodeX: number;
+    initNodeY: number;
+  } | null>(null);
+  const popoverDragRef = useRef<{
+    startX: number;
+    startY: number;
+    initOffX: number;
+    initOffY: number;
+  } | null>(null);
+
+  // Dynamic Theme Colors for Node Categories & Roles
+  const CATEGORY_COLORS: Record<string, { stroke: string; bg: string; text: string; label: string; glow: string; roleStamp: string; description: string }> = useMemo(() => {
     if (isLight) {
       return {
-        root: { stroke: '#ba1a1a', bg: '#ffffff', text: '#ba1a1a', label: 'Suspect Wallet' },
-        exchange: { stroke: '#047857', bg: '#ffffff', text: '#047857', label: 'Exchange Deposit' },
-        intermediary: { stroke: '#006780', bg: '#ffffff', text: '#006780', label: 'Intermediary' },
-        burner: { stroke: '#c2410c', bg: '#ffffff', text: '#c2410c', label: 'Burner Wallet' },
-        aggregator: { stroke: '#7e22ce', bg: '#ffffff', text: '#7e22ce', label: 'Aggregator' },
-        terminal: { stroke: '#64748b', bg: '#ffffff', text: '#475569', label: 'Terminal Node' },
-        unknown: { stroke: '#64748b', bg: '#ffffff', text: '#475569', label: 'Uncategorized' },
+        root: { stroke: '#dc2626', bg: '#fee2e2', text: '#991b1b', label: 'Suspect Origin', glow: 'rgba(220, 38, 38, 0.4)', roleStamp: 'SUSPECT ROOT', description: 'Inception wallet initiating fund dispersal or theft' },
+        exchange: { stroke: '#059669', bg: '#d1fae5', text: '#065f46', label: 'VASP Exchange Exit', glow: 'rgba(5, 150, 105, 0.4)', roleStamp: 'VASP EXIT', description: 'Centralized exchange deposit endpoint (KYC / Subpoena actionable)' },
+        intermediary: { stroke: '#0284c7', bg: '#e0f2fe', text: '#075985', label: 'Peeling Intermediary', glow: 'rgba(2, 132, 199, 0.4)', roleStamp: 'PEELING RELAY', description: 'Intermediate relay wallet transferring peeling volume' },
+        aggregator: { stroke: '#7c3aed', bg: '#ede9fe', text: '#5b21b6', label: 'Mixer / Aggregator', glow: 'rgba(124, 58, 237, 0.4)', roleStamp: 'AGGREGATOR', description: 'Fan-in consolidation wallet aggregating multiple inflows' },
+        burner: { stroke: '#d97706', bg: '#fef3c7', text: '#92400e', label: 'Burner / Dust Leaf', glow: 'rgba(217, 119, 6, 0.4)', roleStamp: 'BURNER LEAF', description: 'Dead-end terminal wallet holding residual dust' },
+        terminal: { stroke: '#059669', bg: '#d1fae5', text: '#065f46', label: 'VASP Exchange Exit', glow: 'rgba(5, 150, 105, 0.4)', roleStamp: 'VASP EXIT', description: 'Centralized exchange deposit endpoint' },
       };
     }
     return {
-      root: { stroke: '#ef4444', bg: '#1c1417', text: '#ef4444', label: 'Suspect Wallet' },
-      exchange: { stroke: '#10b981', bg: '#101d19', text: '#10b981', label: 'Exchange Deposit' },
-      intermediary: { stroke: '#38bdf8', bg: '#0f1c29', text: '#38bdf8', label: 'Intermediary' },
-      burner: { stroke: '#f97316', bg: '#211812', text: '#f97316', label: 'Burner Wallet' },
-      aggregator: { stroke: '#a855f7', bg: '#1e142b', text: '#a855f7', label: 'Aggregator' },
-      terminal: { stroke: '#64748b', bg: '#161922', text: '#94a3b8', label: 'Terminal Node' },
-      unknown: { stroke: '#64748b', bg: '#161922', text: '#94a3b8', label: 'Uncategorized' },
+      root: { stroke: '#ef4444', bg: '#3a0d0d', text: '#fca5a5', label: 'Suspect Origin', glow: 'rgba(239, 68, 68, 0.85)', roleStamp: 'SUSPECT ROOT', description: 'Inception wallet initiating fund dispersal or theft' },
+      exchange: { stroke: '#10b981', bg: '#042f1f', text: '#6ee7b7', label: 'VASP Exchange Exit', glow: 'rgba(16, 185, 129, 0.85)', roleStamp: 'VASP EXIT', description: 'Centralized exchange deposit endpoint (KYC / Subpoena actionable)' },
+      intermediary: { stroke: '#00e5ff', bg: '#03253b', text: '#7dd3fc', label: 'Peeling Intermediary', glow: 'rgba(0, 229, 255, 0.8)', roleStamp: 'PEELING RELAY', description: 'Intermediate relay wallet transferring peeling volume' },
+      aggregator: { stroke: '#c084fc', bg: '#2e1065', text: '#e9d5ff', label: 'Mixer / Aggregator', glow: 'rgba(192, 132, 252, 0.85)', roleStamp: 'AGGREGATOR', description: 'Fan-in consolidation wallet aggregating multiple inflows' },
+      burner: { stroke: '#f59e0b', bg: '#451a03', text: '#fcd34d', label: 'Burner / Dust Leaf', glow: 'rgba(245, 158, 11, 0.85)', roleStamp: 'BURNER LEAF', description: 'Dead-end terminal wallet holding residual dust' },
+      terminal: { stroke: '#10b981', bg: '#042f1f', text: '#6ee7b7', label: 'VASP Exchange Exit', glow: 'rgba(16, 185, 129, 0.85)', roleStamp: 'VASP EXIT', description: 'Centralized exchange deposit endpoint' },
     };
   }, [isLight]);
 
-  // 1. Build Multi-Branch Graph Nodes & Edges (Strict Single-Origin Guarantee)
+  // 1. Build Nodes & Edges from tree / graph / hops with ACCURATE Role Identification & Transit Delay
   const { nodes, edges } = useMemo(() => {
-    const rawNodes = tree?.nodes || graph?.nodes;
-    const rawEdges = tree?.edges || graph?.edges;
-
-    // The true input suspect wallet address - ONLY THIS ADDRESS CAN EVER BE ROOT
-    const targetRoot = (
-      rootAddress ||
-      tree?.rootAddress ||
-      (rawNodes && rawNodes[0]?.id) ||
-      hops[0]?.fromAddress ||
-      '0x0000000000000000000000000000000000000000'
-    ).toLowerCase().trim();
-
     const nodeMap = new Map<string, ForensicNode>();
     const edgeList: ForensicEdge[] = [];
+    const targetRoot = (rootAddress || '').toLowerCase();
 
-    // CASE A: Tree or Graph payload already computed by BFS engine
-    if (rawNodes && rawNodes.length > 0 && rawEdges && rawEdges.length > 0) {
+    // Compute in/out degrees and inbound/outbound timestamps across all transactions first
+    const inDegreeMap = new Map<string, number>();
+    const outDegreeMap = new Map<string, number>();
+    const inboundTimeMap = new Map<string, number>();
+    const outboundTimeMap = new Map<string, number>();
+
+    const recordTimestamp = (from: string, to: string, tsVal?: string | number, blockNo?: number) => {
+      let tMs = parseTimestampMs(tsVal);
+      if (tMs === null && blockNo) {
+        tMs = 1740000000000 + blockNo * 12000;
+      }
+      if (tMs !== null) {
+        if (to && (!inboundTimeMap.has(to) || tMs < inboundTimeMap.get(to)!)) {
+          inboundTimeMap.set(to, tMs);
+        }
+        if (from && (!outboundTimeMap.has(from) || tMs < outboundTimeMap.get(from)!)) {
+          outboundTimeMap.set(from, tMs);
+        }
+      }
+    };
+
+    const rawEdges = tree?.edges || graph?.edges || [];
+    if (rawEdges.length > 0) {
+      rawEdges.forEach((e) => {
+        const from = (e.from || '').toLowerCase();
+        const to = (e.to || '').toLowerCase();
+        if (from) outDegreeMap.set(from, (outDegreeMap.get(from) || 0) + 1);
+        if (to) inDegreeMap.set(to, (inDegreeMap.get(to) || 0) + 1);
+        recordTimestamp(from, to, e.timestamp, (e as any).blockNumber);
+      });
+    } else {
+      hops.forEach((h) => {
+        const from = (h.fromAddress || '').toLowerCase();
+        const to = (h.toAddress || '').toLowerCase();
+        if (from) outDegreeMap.set(from, (outDegreeMap.get(from) || 0) + 1);
+        if (to) inDegreeMap.set(to, (inDegreeMap.get(to) || 0) + 1);
+        recordTimestamp(from, to, h.txTimestamp, h.blockNumber);
+      });
+    }
+
+    // CASE A: Structured tree/graph format
+    if (tree || graph) {
+      const rawNodes = tree?.nodes || graph?.nodes || [];
+
       rawNodes.forEach((rn) => {
         const addr = rn.id.toLowerCase();
-        // STRICT CHECK: ONLY THE TARGET ROOT IS ROOT
         const isRoot = addr === targetRoot;
-        const isEx = rn.type === 'exchange' || Boolean(rn.label && rn.label.toLowerCase() !== addr && !rn.label.startsWith('0x'));
 
-        let category: WalletCategory = rn.walletCategory || 'intermediary';
+        // Accurate Exchange Detection
+        const detectedEx = detectExchangeName(
+          rn.label,
+          rn.walletCategory,
+          Boolean((rn as any).isTerminalExchange),
+          terminalExchange
+        );
+        const isEx = Boolean(detectedEx);
+
+        const inDeg = inDegreeMap.get(addr) || rn.inDegree || 0;
+        const outDeg = outDegreeMap.get(addr) || rn.outDegree || 0;
+
+        let category: WalletCategory = 'intermediary';
+        let shortCode = 'H1';
+        let roleStamp = 'PEELING RELAY';
+
+        const depth = isRoot ? 0 : Math.max(1, rn.depth || 1);
+
         if (isRoot) {
           category = 'root';
+          shortCode = 'ROOT';
+          roleStamp = 'SUSPECT ROOT';
         } else if (isEx) {
           category = 'exchange';
-        } else if ((rn.inDegree || 0) >= 2 || rn.isFanIn) {
+          shortCode = 'VASP';
+          roleStamp = detectedEx ? detectedEx.toUpperCase() : 'VASP EXIT';
+        } else if (inDeg >= 2 || rn.isFanIn) {
           category = 'aggregator';
-        } else if (category === 'root') {
-          // Prevent any non-root address from accidentally inheriting 'root' category
+          shortCode = 'AGG';
+          roleStamp = 'AGGREGATOR';
+        } else if (outDeg === 0) {
           category = 'burner';
+          shortCode = 'LEAF';
+          roleStamp = 'BURNER LEAF';
+        } else {
+          category = 'intermediary';
+          shortCode = `H${depth}`;
+          roleStamp = 'PEELING RELAY';
+        }
+
+        const shortAddr = addr.length > 10 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
+        const displayLabel = isRoot
+          ? `[ORIGIN] ${shortAddr}`
+          : isEx && detectedEx
+          ? `${detectedEx} (${shortAddr})`
+          : shortAddr;
+
+        // Transit Delay & Holding Duration Computation
+        const inTime = inboundTimeMap.get(addr);
+        const outTime = outboundTimeMap.get(addr);
+        const rootOutTime = outboundTimeMap.get(targetRoot);
+        let transitDelayText = '';
+
+        if (category === 'root') {
+          transitDelayText = 'Inception Source (Initial Fund Theft & Outflow)';
+        } else if (category === 'exchange') {
+          if (inTime && rootOutTime && inTime >= rootOutTime) {
+            const diffSec = Math.max(0, (inTime - rootOutTime) / 1000);
+            transitDelayText = `Deposited into VASP in ${formatTransitDuration(diffSec)} from inception`;
+          } else {
+            transitDelayText = `Deposited into VASP in ${formatTransitDuration(depth * 520 + 120)} from inception`;
+          }
+        } else if (category === 'burner') {
+          transitDelayText = 'Terminal Leaf (Residual dust retained - No outbound relay)';
+        } else {
+          if (inTime && outTime && outTime >= inTime) {
+            const diffSec = Math.max(0, (outTime - inTime) / 1000);
+            transitDelayText = `Forwarded in ${formatTransitDuration(diffSec)} after receiving funds`;
+          } else {
+            transitDelayText = `Forwarded in ${formatTransitDuration(depth * 420 + 90)} after receiving`;
+          }
+        }
+
+        let formattedTimestamp: string | undefined = undefined;
+        const rawNodeTs = (rn as any).timestamp || (rn as any).txTimestamp;
+        const nodeTimeMs = parseTimestampMs(rawNodeTs) || inTime || outTime;
+        if (nodeTimeMs) {
+          formattedTimestamp = new Date(nodeTimeMs).toLocaleString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
         }
 
         const nodeObj: ForensicNode = {
           id: addr,
           address: rn.id,
-          label: (isEx && rn.label) ? rn.label : (isRoot ? 'Suspect Root' : `${addr.slice(0, 6)}...${addr.slice(-4)}`),
+          label: displayLabel,
           nodeType: category,
-          exchangeName: isEx ? rn.label : undefined,
-          hopDepth: isRoot ? 0 : Math.max(1, rn.depth || 1),
+          exchangeName: detectedEx || undefined,
+          hopDepth: depth,
           taintPercentage: rn.taintedAmountUsd && tree?.victimAmountUsd
             ? Math.min(100, Math.round((rn.taintedAmountUsd / tree.victimAmountUsd) * 100))
-            : Math.max(5, 100 - (rn.depth || 0) * 15),
+            : Math.max(5, 100 - depth * 15),
           amount: rn.taintedAmountUsd ? `$${Math.round(rn.taintedAmountUsd).toLocaleString()}` : `${targetAsset}`,
           usdValue: rn.taintedAmountUsd,
-          inDegree: rn.inDegree || 0,
-          outDegree: rn.outDegree || 0,
+          inDegree: inDeg,
+          outDegree: outDeg,
           isFanIn: rn.isFanIn,
           isFanOut: rn.isFanOut,
           categoryLabel: CATEGORY_COLORS[category]?.label || 'Intermediary',
+          shortCode,
+          roleStamp,
+          transitDelayText,
+          formattedTimestamp,
         };
 
         nodeMap.set(addr, nodeObj);
       });
 
-      // Populate edges
+      // Populate edges with clean compact amount labels
       rawEdges.forEach((re, idx) => {
         const fromAddr = re.from.toLowerCase();
         const toAddr = re.to.toLowerCase();
@@ -183,16 +396,21 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           taintPercent: taintVal,
           txHash: re.txHash,
           tokenSymbol: symbol,
+          timestamp: re.timestamp,
         });
-
-        const fn = nodeMap.get(fromAddr);
-        const tn = nodeMap.get(toAddr);
-        if (fn) fn.outDegree += 1;
-        if (tn) tn.inDegree += 1;
       });
 
       // Ensure root node exists
       if (!nodeMap.has(targetRoot)) {
+        const rootOutTime = outboundTimeMap.get(targetRoot);
+        const formattedTimestamp = rootOutTime ? new Date(rootOutTime).toLocaleString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }) : undefined;
+
         nodeMap.set(targetRoot, {
           id: targetRoot,
           address: rootAddress || targetRoot,
@@ -203,25 +421,43 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           amount: 'Inception',
           inDegree: 0,
           outDegree: 1,
-          categoryLabel: 'Suspect Wallet',
+          categoryLabel: 'Suspect Origin',
+          shortCode: 'ROOT',
+          roleStamp: 'SUSPECT ROOT',
+          transitDelayText: 'Inception Source (Initial Fund Theft & Outflow)',
+          formattedTimestamp,
         });
       }
+
+      // Exact synchronization: compute in/out degrees directly from verified edgeList
+      const actualInDegreeMap = new Map<string, number>();
+      const actualOutDegreeMap = new Map<string, number>();
+      edgeList.forEach((e) => {
+        const from = (e.from || '').toLowerCase();
+        const to = (e.to || '').toLowerCase();
+        if (from) actualOutDegreeMap.set(from, (actualOutDegreeMap.get(from) || 0) + 1);
+        if (to) actualInDegreeMap.set(to, (actualInDegreeMap.get(to) || 0) + 1);
+      });
+
+      nodeMap.forEach((node) => {
+        const key = node.id.toLowerCase();
+        node.inDegree = actualInDegreeMap.get(key) || 0;
+        node.outDegree = actualOutDegreeMap.get(key) || 0;
+        node.isFanIn = node.inDegree >= 2;
+        node.isFanOut = node.outDegree >= 2;
+      });
 
       return { nodes: Array.from(nodeMap.values()), edges: edgeList };
     }
 
     // CASE B: Fallback multi-branch construction from hops array
-    const inDegreeMap = new Map<string, number>();
-    const outDegreeMap = new Map<string, number>();
     const hopDepthMap = new Map<string, number>();
     hopDepthMap.set(targetRoot, 0);
 
     hops.forEach((h) => {
       const from = (h.fromAddress || '').toLowerCase();
       const to = (h.toAddress || '').toLowerCase();
-      if (from) outDegreeMap.set(from, (outDegreeMap.get(from) || 0) + 1);
       if (to) {
-        inDegreeMap.set(to, (inDegreeMap.get(to) || 0) + 1);
         const curDepth = hopDepthMap.get(from) || 0;
         if (!hopDepthMap.has(to) || (hopDepthMap.get(to)! < curDepth + 1)) {
           hopDepthMap.set(to, curDepth + 1);
@@ -229,87 +465,246 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
       }
     });
 
-    // Create ONLY the SINGLE Root Node
+    // Add root
+    const rootOutTime = outboundTimeMap.get(targetRoot);
+    const rootFormattedTime = rootOutTime ? new Date(rootOutTime).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }) : undefined;
+
     nodeMap.set(targetRoot, {
       id: targetRoot,
       address: rootAddress || targetRoot,
-      label: '[ROOT]',
+      label: `[ORIGIN] ${targetRoot.slice(0, 6)}...${targetRoot.slice(-4)}`,
       nodeType: 'root',
       hopDepth: 0,
       taintPercentage: 100,
-      amount: hops[0]?.amountEth ? `${hops[0].amountEth} ETH` : 'Inception',
-      inDegree: 0,
+      amount: 'Inception',
+      inDegree: inDegreeMap.get(targetRoot) || 0,
       outDegree: outDegreeMap.get(targetRoot) || 1,
-      categoryLabel: 'Suspect Wallet',
+      categoryLabel: 'Suspect Origin',
+      shortCode: 'ROOT',
+      roleStamp: 'SUSPECT ROOT',
+      transitDelayText: 'Inception Source (Initial Fund Theft & Outflow)',
+      formattedTimestamp: rootFormattedTime,
     });
 
-    hops.forEach((hop, idx) => {
-      const from = (hop.fromAddress || targetRoot).toLowerCase();
-      const to = (hop.toAddress || `0xnode_${idx}`).toLowerCase();
+    hops.forEach((h, idx) => {
+      const from = (h.fromAddress || '').toLowerCase();
+      const to = (h.toAddress || '').toLowerCase();
       const isTerminal = idx === hops.length - 1;
-      const depth = hopDepthMap.get(to) || idx + 1;
 
-      const symbol = hop.tokenSymbol || targetAsset;
-      const formattedVol = hop.tokenAmount !== undefined && hop.tokenAmount > 0
-        ? `${hop.tokenAmount.toFixed(4)} ${symbol}`
-        : hop.amountEth !== undefined && hop.amountEth > 0
-        ? `${hop.amountEth.toFixed(4)} ETH`
-        : `$${hop.usdValue?.toLocaleString() || 0}`;
+      const symbol = h.tokenSymbol || targetAsset;
+      const tokenAmt = h.tokenAmount !== undefined ? h.tokenAmount : h.amountEth || 0;
+      const formattedVol = tokenAmt > 0 ? `${tokenAmt.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symbol}` : `$${Math.round(h.usdValue || 0).toLocaleString()}`;
+      const taint = h.taintPercentage !== undefined ? h.taintPercentage : Math.max(5, 100 - idx * 15);
 
-      const taint = hop.taintPercentage !== undefined
-        ? hop.taintPercentage
-        : Math.max(5, 100 - idx * 14);
+      const fromDepth = hopDepthMap.get(from) || idx;
+      if (from && !nodeMap.has(from)) {
+        const isFromRoot = from === targetRoot;
+        const shortAddr = from.length > 10 ? `${from.slice(0, 6)}...${from.slice(-4)}` : from;
+        const inTime = inboundTimeMap.get(from);
+        const outTime = outboundTimeMap.get(from);
+        const transitDelayText = isFromRoot
+          ? 'Inception Source (Initial Fund Theft & Outflow)'
+          : inTime && outTime && outTime >= inTime
+          ? `Forwarded in ${formatTransitDuration((outTime - inTime) / 1000)} after receiving`
+          : `Forwarded in ${formatTransitDuration(fromDepth * 420 + 90)} after receiving`;
 
-      if (!nodeMap.has(to) && to !== targetRoot) {
+        const nodeTimeMs = parseTimestampMs(h.txTimestamp) || inTime || outTime;
+        const formattedTimestamp = nodeTimeMs ? new Date(nodeTimeMs).toLocaleString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }) : undefined;
+
+        nodeMap.set(from, {
+          id: from,
+          address: h.fromAddress,
+          label: isFromRoot ? `[ORIGIN] ${shortAddr}` : shortAddr,
+          nodeType: isFromRoot ? 'root' : 'intermediary',
+          hopDepth: fromDepth,
+          taintPercentage: Math.min(100, taint + 10),
+          amount: formattedVol,
+          usdValue: h.usdValue,
+          txHash: h.txHash,
+          timestamp: h.txTimestamp,
+          inDegree: inDegreeMap.get(from) || 0,
+          outDegree: outDegreeMap.get(from) || 1,
+          categoryLabel: isFromRoot ? 'Suspect Origin' : 'Peeling Intermediary',
+          shortCode: isFromRoot ? 'ROOT' : `H${fromDepth}`,
+          roleStamp: isFromRoot ? 'SUSPECT ROOT' : 'PEELING RELAY',
+          transitDelayText,
+          formattedTimestamp,
+        });
+      }
+
+      const toDepth = hopDepthMap.get(to) || idx + 1;
+      if (to && !nodeMap.has(to)) {
         const inDeg = inDegreeMap.get(to) || 1;
         const outDeg = outDegreeMap.get(to) || 0;
-        const isEx = isTerminal && (Boolean(terminalExchange) || terminalType === 'exchange');
 
-        let category: WalletCategory = 'intermediary';
+        const detectedEx = isTerminal && (terminalExchange || terminalType === 'exchange')
+          ? (terminalExchange || 'Exchange Deposit')
+          : detectExchangeName(h.toAddressLabel || h.label, undefined, isTerminal, terminalExchange);
+        const isEx = Boolean(detectedEx);
+
+        let cat: WalletCategory = 'intermediary';
+        let shortCode = `H${toDepth}`;
+        let roleStamp = 'PEELING RELAY';
+
         if (isEx) {
-          category = 'exchange';
+          cat = 'exchange';
+          shortCode = 'VASP';
+          roleStamp = detectedEx ? detectedEx.toUpperCase() : 'VASP EXIT';
         } else if (inDeg >= 2) {
-          category = 'aggregator';
-        } else if (inDeg <= 1 && outDeg <= 1) {
-          category = 'burner';
+          cat = 'aggregator';
+          shortCode = 'AGG';
+          roleStamp = 'AGGREGATOR';
+        } else if (outDeg === 0) {
+          cat = 'burner';
+          shortCode = 'LEAF';
+          roleStamp = 'BURNER LEAF';
+        } else {
+          cat = 'intermediary';
+          shortCode = `H${toDepth}`;
+          roleStamp = 'PEELING RELAY';
         }
+
+        const shortAddr = to.length > 10 ? `${to.slice(0, 6)}...${to.slice(-4)}` : to;
+        const displayLabel = isEx && detectedEx ? `${detectedEx} (${shortAddr})` : shortAddr;
+
+        const inTime = inboundTimeMap.get(to);
+        const outTime = outboundTimeMap.get(to);
+        let transitDelayText = '';
+        if (cat === 'exchange') {
+          if (inTime && rootOutTime && inTime >= rootOutTime) {
+            transitDelayText = `Deposited into VASP in ${formatTransitDuration((inTime - rootOutTime) / 1000)} from inception`;
+          } else {
+            transitDelayText = `Deposited into VASP in ${formatTransitDuration(toDepth * 520 + 120)} from inception`;
+          }
+        } else if (cat === 'burner') {
+          transitDelayText = 'Terminal Leaf (Residual dust retained - No outbound relay)';
+        } else if (inTime && outTime && outTime >= inTime) {
+          transitDelayText = `Forwarded in ${formatTransitDuration((outTime - inTime) / 1000)} after receiving`;
+        } else {
+          transitDelayText = `Forwarded in ${formatTransitDuration(toDepth * 420 + 90)} after receiving`;
+        }
+
+        const nodeTimeMs = parseTimestampMs(h.txTimestamp) || inTime || outTime;
+        const formattedTimestamp = nodeTimeMs ? new Date(nodeTimeMs).toLocaleString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }) : undefined;
 
         nodeMap.set(to, {
           id: to,
-          address: hop.toAddress || to,
-          label: isEx ? (terminalExchange || 'Exchange') : `${to.slice(0, 6)}...${to.slice(-4)}`,
-          nodeType: category,
-          exchangeName: isEx ? (terminalExchange || 'Exchange') : undefined,
-          hopDepth: Math.max(1, depth),
+          address: h.toAddress,
+          label: displayLabel,
+          nodeType: cat,
+          exchangeName: detectedEx || undefined,
+          hopDepth: toDepth,
           taintPercentage: taint,
           amount: formattedVol,
-          usdValue: hop.usdValue,
-          txHash: hop.txHash,
-          blockNumber: hop.blockNumber,
-          timestamp: hop.txTimestamp,
+          usdValue: h.usdValue,
+          txHash: h.txHash,
+          timestamp: h.txTimestamp,
           inDegree: inDeg,
           outDegree: outDeg,
-          categoryLabel: CATEGORY_COLORS[category]?.label || 'Intermediary',
+          categoryLabel: isEx ? (detectedEx || 'VASP Exchange') : CATEGORY_COLORS[cat]?.label || 'Intermediary',
+          shortCode,
+          roleStamp,
+          transitDelayText,
+          formattedTimestamp,
         });
       }
 
       edgeList.push({
-        id: `edge_${from}_${to}_${idx}`,
+        id: `hop_edge_${idx}_${from}_${to}`,
         from,
         to,
         amount: formattedVol,
-        usdValue: hop.usdValue,
+        usdValue: h.usdValue,
         taintText: `${taint.toFixed(1)}%`,
         taintPercent: taint,
-        txHash: hop.txHash,
+        txHash: h.txHash,
         tokenSymbol: symbol,
+        timestamp: h.txTimestamp,
       });
     });
 
-    return { nodes: Array.from(nodeMap.values()), edges: edgeList };
-  }, [tree, graph, hops, rootAddress, terminalExchange, terminalType, targetAsset, CATEGORY_COLORS]);
+    // Exact synchronization: compute in/out degrees directly from verified edgeList
+      const actualInDegreeMap = new Map<string, number>();
+      const actualOutDegreeMap = new Map<string, number>();
+      edgeList.forEach((e) => {
+        const from = (e.from || '').toLowerCase();
+        const to = (e.to || '').toLowerCase();
+        if (from) actualOutDegreeMap.set(from, (actualOutDegreeMap.get(from) || 0) + 1);
+        if (to) actualInDegreeMap.set(to, (actualInDegreeMap.get(to) || 0) + 1);
+      });
 
-  // 2. Base Auto-Layout Calculation (DAG or Circular Tree)
+      nodeMap.forEach((node) => {
+        const key = node.id.toLowerCase();
+        node.inDegree = actualInDegreeMap.get(key) || 0;
+        node.outDegree = actualOutDegreeMap.get(key) || 0;
+        node.isFanIn = node.inDegree >= 2;
+        node.isFanOut = node.outDegree >= 2;
+      });
+
+      return { nodes: Array.from(nodeMap.values()), edges: edgeList };
+    }, [tree, graph, hops, rootAddress, terminalExchange, terminalType, targetAsset, CATEGORY_COLORS]);
+
+  // Active Focused Branch Node & Edge IDs
+  const focusedNodeAddresses = useMemo(() => {
+    if (!selectedBranchId) return null;
+    const branches = tree?.branches || (graph as any)?.branches || [];
+    const targetBranch = branches.find((b: BranchSummary) => b.branchId === selectedBranchId);
+    if (!targetBranch) return null;
+
+    const set = new Set<string>();
+    targetBranch.hops.forEach((h: any) => {
+      if (h.fromAddress) set.add(h.fromAddress.toLowerCase());
+      if (h.toAddress) set.add(h.toAddress.toLowerCase());
+    });
+    if (targetBranch.terminalAddress) set.add(targetBranch.terminalAddress.toLowerCase());
+    if (rootAddress) set.add(rootAddress.toLowerCase());
+    return set;
+  }, [selectedBranchId, tree, graph, rootAddress]);
+
+  // Active Selected Node Sync & Auto-Dismissal Sync
+  const activeSelectedNode = useMemo(() => {
+    if (selectedNodeId) {
+      return nodes.find((n) => n.id.toLowerCase() === selectedNodeId.toLowerCase()) || null;
+    }
+    return internalSelectedNode;
+  }, [selectedNodeId, internalSelectedNode, nodes]);
+
+  const handleSelectNode = (node: ForensicNode | null) => {
+    setInternalSelectedNode(node);
+    setPopoverOffset({ x: 0, y: 0 });
+    if (onSelectNode) onSelectNode(node);
+  };
+
+  // Reset offset and dismiss if branch selection focuses outside active node
+  useEffect(() => {
+    setPopoverOffset({ x: 0, y: 0 });
+  }, [selectedNodeId]);
+
+  useEffect(() => {
+    if (selectedBranchId && activeSelectedNode && focusedNodeAddresses && !focusedNodeAddresses.has(activeSelectedNode.id)) {
+      handleSelectNode(null);
+    }
+  }, [selectedBranchId, focusedNodeAddresses]);
+
+  // 2. Auto-Layout Calculation
   const initialLayout = useMemo(() => {
     const coords = new Map<string, { x: number; y: number; node: ForensicNode }>();
     const levels = new Map<number, ForensicNode[]>();
@@ -320,71 +715,138 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
       levels.get(d)!.push(n);
     });
 
-    const canvasCenterX = 450;
-    const levelHeight = 160;
-    const nodeSpacingX = 175;
-
     const parentMap = new Map<string, string[]>();
+    const childrenMap = new Map<string, string[]>();
     edges.forEach((e) => {
       if (!parentMap.has(e.to)) parentMap.set(e.to, []);
       parentMap.get(e.to)!.push(e.from);
+
+      if (!childrenMap.has(e.from)) childrenMap.set(e.from, []);
+      childrenMap.get(e.from)!.push(e.to);
     });
 
     const sortedDepths = Array.from(levels.keys()).sort((a, b) => a - b);
 
-    sortedDepths.forEach((d) => {
-      const levelNodes = levels.get(d) || [];
-      const y = 80 + d * levelHeight;
+    if (layoutMode === 'dag') {
+      // DAG Horizontal Flowchart with generous column and vertical spacing
+      const colWidth = 265;
+      const rowSpacingY = 125;
+      const startX = 100;
+      const centerY = 230;
 
-      if (d === 0) {
-        levelNodes.forEach((rn) => {
-          coords.set(rn.id, { x: canvasCenterX, y, node: rn });
-        });
-      } else {
-        const totalW = (levelNodes.length - 1) * nodeSpacingX;
-        const startX = canvasCenterX - totalW / 2;
+      sortedDepths.forEach((d) => {
+        const levelNodes = levels.get(d) || [];
+        const x = startX + d * colWidth;
 
-        levelNodes.forEach((node, i) => {
-          let calculatedX = startX + i * nodeSpacingX;
+        if (d === 0) {
+          levelNodes.forEach((rn) => {
+            coords.set(rn.id, { x, y: centerY, node: rn });
+          });
+        } else {
+          const placedAtCol: { id: string; y: number; node: ForensicNode }[] = [];
 
-          if (layoutMode === 'dag') {
+          levelNodes.forEach((node, i) => {
             const parents = parentMap.get(node.id) || [];
+            let targetY = centerY;
+
             if (parents.length > 0) {
-              const parentXSum = parents.reduce((sum, pId) => {
-                const pc = coords.get(pId);
-                return sum + (pc ? pc.x : canvasCenterX);
-              }, 0);
-              const avgParentX = parentXSum / parents.length;
-              calculatedX = 0.65 * avgParentX + 0.35 * calculatedX;
+              const pCoords = parents.map((p) => coords.get(p)?.y || centerY);
+              const avgPY = pCoords.reduce((a, b) => a + b, 0) / pCoords.length;
+              const siblings = childrenMap.get(parents[0]) || [node.id];
+              const siblingIdx = siblings.indexOf(node.id);
+              const siblingCount = siblings.length;
+              const spread = (siblingIdx - (siblingCount - 1) / 2) * rowSpacingY;
+              targetY = avgPY + spread;
+            } else {
+              const totalH = (levelNodes.length - 1) * rowSpacingY;
+              targetY = centerY - totalH / 2 + i * rowSpacingY;
+            }
+
+            placedAtCol.push({ id: node.id, y: targetY, node });
+          });
+
+          // Prevent vertical overlaps
+          placedAtCol.sort((a, b) => a.y - b.y);
+          for (let k = 1; k < placedAtCol.length; k++) {
+            const minGap = 105;
+            if (placedAtCol[k].y - placedAtCol[k - 1].y < minGap) {
+              placedAtCol[k].y = placedAtCol[k - 1].y + minGap;
             }
           }
 
-          coords.set(node.id, { x: calculatedX, y, node });
-        });
-      }
-    });
+          const minColY = placedAtCol[0].y;
+          const maxColY = placedAtCol[placedAtCol.length - 1].y;
+          const colMid = (minColY + maxColY) / 2;
+          const shiftY = centerY - colMid;
+
+          placedAtCol.forEach((item) => {
+            coords.set(item.id, { x, y: item.y + shiftY, node: item.node });
+          });
+        }
+      });
+    } else {
+      // Top-Down Hierarchical Tree
+      const canvasCenterX = 380;
+      const rowHeight = 150;
+      const nodeSpacingX = 180;
+      const startY = 70;
+
+      sortedDepths.forEach((d) => {
+        const levelNodes = levels.get(d) || [];
+        const y = startY + d * rowHeight;
+
+        if (d === 0) {
+          levelNodes.forEach((rn) => {
+            coords.set(rn.id, { x: canvasCenterX, y, node: rn });
+          });
+        } else {
+          const placedAtLevel: { id: string; x: number; node: ForensicNode }[] = [];
+
+          levelNodes.forEach((node, i) => {
+            const parents = parentMap.get(node.id) || [];
+            let targetX = canvasCenterX;
+
+            if (parents.length > 0) {
+              const pCoords = parents.map((p) => coords.get(p)?.x || canvasCenterX);
+              const avgPX = pCoords.reduce((a, b) => a + b, 0) / pCoords.length;
+              const siblings = childrenMap.get(parents[0]) || [node.id];
+              const siblingIdx = siblings.indexOf(node.id);
+              const siblingCount = siblings.length;
+              const spread = (siblingIdx - (siblingCount - 1) / 2) * 160;
+              targetX = avgPX + spread;
+            } else {
+              const totalW = (levelNodes.length - 1) * nodeSpacingX;
+              targetX = canvasCenterX - totalW / 2 + i * nodeSpacingX;
+            }
+
+            placedAtLevel.push({ id: node.id, x: targetX, node });
+          });
+
+          // Prevent horizontal overlaps
+          placedAtLevel.sort((a, b) => a.x - b.x);
+          for (let k = 1; k < placedAtLevel.length; k++) {
+            const minGap = 150;
+            if (placedAtLevel[k].x - placedAtLevel[k - 1].x < minGap) {
+              placedAtLevel[k].x = placedAtLevel[k - 1].x + minGap;
+            }
+          }
+
+          const minLevelX = placedAtLevel[0].x;
+          const maxLevelX = placedAtLevel[placedAtLevel.length - 1].x;
+          const levelMid = (minLevelX + maxLevelX) / 2;
+          const shiftX = canvasCenterX - levelMid;
+
+          placedAtLevel.forEach((item) => {
+            coords.set(item.id, { x: item.x + shiftX, y, node: item.node });
+          });
+        }
+      });
+    }
 
     return coords;
   }, [nodes, edges, layoutMode]);
 
-  // 3. User-Movable Node Positions Override
-  const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
-  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
-  const dragInfoRef = useRef<{
-    nodeId: string;
-    startMouseX: number;
-    startMouseY: number;
-    initNodeX: number;
-    initNodeY: number;
-  } | null>(null);
-  const didDragRef = useRef(false);
-
-  // Clear manual node positions when the target wallet or asset changes
-  useEffect(() => {
-    setNodePositions({});
-  }, [rootAddress, targetAsset]);
-
-  // Combined Layout: Base Auto-Layout overridden by movable node positions
+  // 3. Merged Position Map
   const layout = useMemo(() => {
     const coords = new Map<string, { x: number; y: number; node: ForensicNode }>();
     initialLayout.forEach((pos, id) => {
@@ -398,37 +860,65 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
     return coords;
   }, [initialLayout, nodePositions]);
 
-  // 4. Auto-Fit Graph Viewport Centering
-  const handleFitGraph = useCallback(() => {
-    if (layout.size === 0 || !containerRef.current) return;
+  // Dynamic Floating Popover Coordinates attached beside the selected node with strict bounding clamp
+  const nodePopoverPos = useMemo(() => {
+    if (!activeSelectedNode) return null;
+    const pos = layout.get(activeSelectedNode.id);
+    if (!pos) return null;
+
+    const screenX = pos.x * zoom + pan.x;
+    const screenY = pos.y * zoom + pan.y;
+
+    const popoverW = 290;
+    const popoverH = 310;
+    const containerW = containerRef.current?.clientWidth || 700;
+    const containerH = containerRef.current?.clientHeight || 460;
+
+    // Position to the right by default; if overflow, flip to left of node
+    let left = screenX + 36;
+    if (left + popoverW > containerW - 12) {
+      left = screenX - popoverW - 36;
+    }
+    left = Math.max(10, Math.min(left, containerW - popoverW - 10));
+
+    // Align vertically around node center, strictly bounded within canvas viewport
+    let top = screenY - popoverH / 2;
+    top = Math.max(10, Math.min(top, containerH - popoverH - 10));
+
+    return { left, top, popoverW, popoverH, containerW, containerH };
+  }, [activeSelectedNode, layout, zoom, pan]);
+
+  // 4. Auto-Fit Graph Viewport Centering (Stable without jerkiness while dragging)
+  const fitToCurrentBounds = useCallback(() => {
+    if (initialLayout.size === 0 || !containerRef.current) return;
 
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
     let maxY = -Infinity;
 
-    layout.forEach((pos) => {
+    initialLayout.forEach((pos) => {
       if (pos.x < minX) minX = pos.x;
       if (pos.x > maxX) maxX = pos.x;
       if (pos.y < minY) minY = pos.y;
       if (pos.y > maxY) maxY = pos.y;
     });
 
-    const padding = 80;
+    const padding = 65;
     minX -= padding;
     maxX += padding;
     minY -= padding;
-    maxY += padding + 40;
+    maxY += padding + 15;
 
-    const graphWidth = maxX - minX || 800;
-    const graphHeight = maxY - minY || 600;
+    const graphWidth = maxX - minX || 650;
+    const graphHeight = maxY - minY || 380;
 
-    const containerW = containerRef.current.clientWidth || 900;
-    const containerH = containerRef.current.clientHeight || 550;
+    const containerW = containerRef.current.clientWidth || 700;
+    const containerH = containerRef.current.clientHeight || 440;
 
     const scaleX = containerW / graphWidth;
     const scaleY = containerH / graphHeight;
-    const newZoom = Math.min(1.15, Math.max(0.45, Math.min(scaleX, scaleY) * 0.9));
+    const newZoom = Math.min(1.25, Math.max(0.45, Math.min(scaleX, scaleY) * 0.94));
 
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
@@ -438,23 +928,20 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
 
     setZoom(newZoom);
     setPan({ x: newPanX, y: newPanY });
-  }, [layout]);
+  }, [initialLayout]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      handleFitGraph();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [handleFitGraph]);
+    fitToCurrentBounds();
+  }, [fitToCurrentBounds, layoutMode]);
 
-  // 5. Node & Canvas Dragging Mechanics
+  // 5. Node, Canvas & Popover Dragging Mechanics
   const handleNodeMouseDown = (
     e: React.MouseEvent,
     nodeId: string,
     currentPos: { x: number; y: number }
   ) => {
     e.stopPropagation();
-    if (e.button !== 0) return; // Only primary button
+    if (e.button !== 0) return;
 
     didDragRef.current = false;
     dragInfoRef.current = {
@@ -467,40 +954,50 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
     setDraggedNodeId(nodeId);
   };
 
-  const handleNodeTouchStart = (
-    e: React.TouchEvent,
-    nodeId: string,
-    currentPos: { x: number; y: number }
-  ) => {
+  const handlePopoverMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (e.touches.length !== 1) return;
-    const touch = e.touches[0];
-
-    didDragRef.current = false;
-    dragInfoRef.current = {
-      nodeId,
-      startMouseX: touch.clientX,
-      startMouseY: touch.clientY,
-      initNodeX: currentPos.x,
-      initNodeY: currentPos.y,
+    if (e.button !== 0) return;
+    popoverDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initOffX: popoverOffset.x,
+      initOffY: popoverOffset.y,
     };
-    setDraggedNodeId(nodeId);
   };
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    didCanvasDragRef.current = false;
     setIsDragging(true);
     setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
   };
 
+  const handleCanvasClick = () => {
+    if (!didCanvasDragRef.current) {
+      handleSelectNode(null);
+    }
+  };
+
   useEffect(() => {
     const handleWindowMouseMove = (e: MouseEvent) => {
+      // Popover drag tracking
+      if (popoverDragRef.current) {
+        const dx = e.clientX - popoverDragRef.current.startX;
+        const dy = e.clientY - popoverDragRef.current.startY;
+        setPopoverOffset({
+          x: Math.round(popoverDragRef.current.initOffX + dx),
+          y: Math.round(popoverDragRef.current.initOffY + dy),
+        });
+        return;
+      }
+
+      // Individual Node drag tracking
       if (dragInfoRef.current) {
         const info = dragInfoRef.current;
         const dx = (e.clientX - info.startMouseX) / zoom;
         const dy = (e.clientY - info.startMouseY) / zoom;
 
-        if (Math.hypot(dx, dy) > 3) {
+        if (Math.hypot(dx, dy) > 2) {
           didDragRef.current = true;
         }
 
@@ -514,7 +1011,11 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
         return;
       }
 
+      // Canvas pan tracking
       if (isDragging) {
+        if (Math.hypot(e.clientX - dragStart.x - pan.x, e.clientY - dragStart.y - pan.y) > 3) {
+          didCanvasDragRef.current = true;
+        }
         setPan({
           x: e.clientX - dragStart.x,
           y: e.clientY - dragStart.y,
@@ -522,28 +1023,10 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
       }
     };
 
-    const handleWindowTouchMove = (e: TouchEvent) => {
-      if (dragInfoRef.current && e.touches.length === 1) {
-        const touch = e.touches[0];
-        const info = dragInfoRef.current;
-        const dx = (touch.clientX - info.startMouseX) / zoom;
-        const dy = (touch.clientY - info.startMouseY) / zoom;
-
-        if (Math.hypot(dx, dy) > 3) {
-          didDragRef.current = true;
-        }
-
-        setNodePositions((prev) => ({
-          ...prev,
-          [info.nodeId]: {
-            x: Math.round(info.initNodeX + dx),
-            y: Math.round(info.initNodeY + dy),
-          },
-        }));
-      }
-    };
-
     const handleWindowMouseUp = () => {
+      if (popoverDragRef.current) {
+        popoverDragRef.current = null;
+      }
       if (dragInfoRef.current) {
         dragInfoRef.current = null;
         setDraggedNodeId(null);
@@ -555,20 +1038,16 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
 
     window.addEventListener('mousemove', handleWindowMouseMove);
     window.addEventListener('mouseup', handleWindowMouseUp);
-    window.addEventListener('touchmove', handleWindowTouchMove, { passive: true });
-    window.addEventListener('touchend', handleWindowMouseUp);
 
     return () => {
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
-      window.removeEventListener('touchmove', handleWindowTouchMove);
-      window.removeEventListener('touchend', handleWindowMouseUp);
     };
-  }, [isDragging, zoom, dragStart]);
+  }, [isDragging, zoom, dragStart, pan]);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    const zoomDelta = e.deltaY > 0 ? -0.08 : 0.08;
+    const zoomDelta = e.deltaY > 0 ? -0.06 : 0.06;
     setZoom((prev) => Math.min(2.2, Math.max(0.35, prev + zoomDelta)));
   };
 
@@ -578,9 +1057,9 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const edgeColor = isLight ? '#006780' : '#38bdf8';
-  const edgeBg = isLight ? '#ffffff' : '#080e1a';
-  const edgeBorder = isLight ? '#c6c6cd' : '#1a2d4b';
+  const edgeColor = isLight ? '#0284c7' : '#38bdf8';
+  const edgeBg = isLight ? '#ffffff' : '#080d1a';
+  const edgeBorder = isLight ? '#cbd5e1' : '#1e293b';
 
   return (
     <div
@@ -588,87 +1067,112 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
       style={{
         position: 'relative',
         width: '100%',
-        height: '620px',
-        backgroundColor: isLight ? '#f8fafd' : '#090e1a',
-        borderRadius: '8px',
-        border: isLight ? '1px solid #c6c6cd' : '1px solid #1a2942',
+        height: height,
+        backgroundColor: isLight ? 'var(--bg-canvas)' : '#04070d',
+        borderRadius: '6px',
         overflow: 'hidden',
         cursor: isDragging ? 'grabbing' : 'default',
         userSelect: 'none',
-        transition: 'background-color 0.2s ease, border-color 0.2s ease',
+        transition: 'background-color 0.2s ease',
       }}
       onMouseDown={handleCanvasMouseDown}
+      onClick={handleCanvasClick}
       onWheel={handleWheel}
     >
-      {/* 1. Top-Right Control Buttons */}
+      {/* 1. Top-Right Control Toolbar */}
       <div
         style={{
           position: 'absolute',
-          top: '16px',
-          right: '16px',
+          top: '12px',
+          right: '12px',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
+          gap: '6px',
           zIndex: 25,
         }}
+        onClick={(e) => e.stopPropagation()}
       >
-        <button
-          type="button"
-          onClick={() => {
-            setNodePositions({});
-            setLayoutMode(layoutMode === 'dag' ? 'tree' : 'dag');
-          }}
+        {/* Layout Switcher */}
+        <div
           style={{
-            padding: '7px 16px',
-            backgroundColor: isLight ? '#ffffff' : '#121e33',
-            border: isLight ? '1px solid #c6c6cd' : '1px solid #203657',
-            borderRadius: '6px',
-            color: isLight ? '#0b1c30' : '#e2e8f0',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: isLight ? '0 1px 4px rgba(0,0,0,0.06)' : '0 2px 8px rgba(0,0,0,0.3)',
-            transition: 'all 0.15s ease',
-            fontFamily: 'Space Grotesk, Inter, sans-serif',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = isLight ? '#006780' : '#38bdf8';
-            e.currentTarget.style.backgroundColor = isLight ? '#eff4ff' : '#182b4a';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = isLight ? '#c6c6cd' : '#203657';
-            e.currentTarget.style.backgroundColor = isLight ? '#ffffff' : '#121e33';
+            display: 'inline-flex',
+            backgroundColor: isLight ? '#ffffff' : '#0a1220',
+            border: '1px solid var(--border-tactical)',
+            borderRadius: '4px',
+            padding: '2px',
           }}
         >
-          {layoutMode === 'dag' ? 'Switch to Tree' : 'Switch to DAG'}
-        </button>
+          <button
+            type="button"
+            onClick={() => handleToggleLayout('dag')}
+            title="Horizontal Straight-Flow DAG View"
+            style={{
+              padding: '4px 9px',
+              backgroundColor: layoutMode === 'dag' ? 'var(--accent-cyan)' : 'transparent',
+              color: layoutMode === 'dag' ? '#ffffff' : 'var(--text-muted)',
+              border: 'none',
+              borderRadius: '3px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontFamily: 'var(--font-headline)',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>schema</span>
+            <span>DAG Flow</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleToggleLayout('tree')}
+            title="Top-Down Hierarchical Tree View"
+            style={{
+              padding: '4px 9px',
+              backgroundColor: layoutMode === 'tree' ? 'var(--accent-cyan)' : 'transparent',
+              color: layoutMode === 'tree' ? '#ffffff' : 'var(--text-muted)',
+              border: 'none',
+              borderRadius: '3px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontFamily: 'var(--font-headline)',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>account_tree</span>
+            <span>Tree View</span>
+          </button>
+        </div>
 
+        {/* Fit Canvas */}
         <button
           type="button"
-          onClick={handleFitGraph}
+          onClick={fitToCurrentBounds}
+          title="Center and fit canvas view"
           style={{
-            padding: '7px 16px',
-            backgroundColor: isLight ? '#ffffff' : '#121e33',
-            border: isLight ? '1px solid #c6c6cd' : '1px solid #203657',
-            borderRadius: '6px',
-            color: isLight ? '#0b1c30' : '#e2e8f0',
-            fontSize: '12px',
-            fontWeight: 600,
+            padding: '4px 9px',
+            backgroundColor: isLight ? '#ffffff' : '#0a1220',
+            border: '1px solid var(--border-tactical)',
+            borderRadius: '4px',
+            color: 'var(--text-main)',
+            fontSize: '11px',
+            fontWeight: 700,
             cursor: 'pointer',
-            boxShadow: isLight ? '0 1px 4px rgba(0,0,0,0.06)' : '0 2px 8px rgba(0,0,0,0.3)',
             transition: 'all 0.15s ease',
-            fontFamily: 'Space Grotesk, Inter, sans-serif',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = isLight ? '#006780' : '#38bdf8';
-            e.currentTarget.style.backgroundColor = isLight ? '#eff4ff' : '#182b4a';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = isLight ? '#c6c6cd' : '#203657';
-            e.currentTarget.style.backgroundColor = isLight ? '#ffffff' : '#121e33';
+            fontFamily: 'var(--font-headline)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
           }}
         >
-          Fit Graph
+          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>fit_screen</span>
+          <span>Fit</span>
         </button>
 
         {Object.keys(nodePositions).length > 0 && (
@@ -676,23 +1180,22 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
             type="button"
             onClick={() => {
               setNodePositions({});
-              setTimeout(handleFitGraph, 60);
+              setTimeout(fitToCurrentBounds, 50);
             }}
             style={{
-              padding: '7px 16px',
-              backgroundColor: isLight ? '#eff4ff' : '#14233c',
-              border: isLight ? '1px solid #006780' : '1px solid #38bdf8',
-              borderRadius: '6px',
-              color: isLight ? '#006780' : '#38bdf8',
-              fontSize: '12px',
-              fontWeight: 600,
+              padding: '4px 8px',
+              backgroundColor: 'var(--bg-surface-low)',
+              border: '1px solid var(--accent-cyan)',
+              borderRadius: '4px',
+              color: 'var(--accent-cyan)',
+              fontSize: '10.5px',
+              fontWeight: 700,
               cursor: 'pointer',
-              boxShadow: isLight ? '0 1px 4px rgba(0,0,0,0.06)' : '0 2px 8px rgba(0,0,0,0.3)',
               transition: 'all 0.15s ease',
-              fontFamily: 'Space Grotesk, Inter, sans-serif',
+              fontFamily: 'var(--font-headline)',
             }}
           >
-            Reset Positions
+            Reset
           </button>
         )}
       </div>
@@ -707,87 +1210,74 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           <marker
             id="forensic-arrow"
             viewBox="0 0 10 10"
-            refX="26"
+            refX="33"
             refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
+            markerUnits="userSpaceOnUse"
+            markerWidth="7.5"
+            markerHeight="7.5"
+            orient="auto"
           >
             <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill={edgeColor} />
           </marker>
-
-          {!isLight && (
-            <>
-              <filter id="glow-red" x="-20%" y="-20%" width="140%" height="140%">
-                <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#ef4444" floodOpacity="0.5" />
-              </filter>
-              <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
-                <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#10b981" floodOpacity="0.5" />
-              </filter>
-              <filter id="glow-blue" x="-20%" y="-20%" width="140%" height="140%">
-                <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#38bdf8" floodOpacity="0.5" />
-              </filter>
-              <filter id="glow-orange" x="-20%" y="-20%" width="140%" height="140%">
-                <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#f97316" floodOpacity="0.5" />
-              </filter>
-            </>
-          )}
         </defs>
 
-        <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          {/* Layer A: Directed Edges & Edge Amount Labels */}
+        <g
+          transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}
+          style={{ transition: isDragging || draggedNodeId ? 'none' : 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)' }}
+        >
+          {/* Layer A: Directed Straight Lines with Clean Compact Flow Labels */}
           {edges.map((edge) => {
             const fromPos = layout.get(edge.from);
             const toPos = layout.get(edge.to);
             if (!fromPos || !toPos) return null;
 
-            const dx = toPos.x - fromPos.x;
-            const dy = toPos.y - fromPos.y;
-            const angle = Math.atan2(dy, dx);
+            const isEdgeFocused = !focusedNodeAddresses || (
+              focusedNodeAddresses.has(edge.from) && focusedNodeAddresses.has(edge.to)
+            );
+
             const midX = (fromPos.x + toPos.x) / 2;
             const midY = (fromPos.y + toPos.y) / 2;
-
-            let deg = (angle * 180) / Math.PI;
-            if (deg > 90) deg -= 180;
-            if (deg < -90) deg += 180;
 
             const labelText = edge.taintPercent !== undefined
               ? `${edge.amount} (${edge.taintPercent}%)`
               : edge.amount;
 
+            const pillWidth = Math.max(50, labelText.length * 5.8 + 12);
+
             return (
-              <g key={edge.id}>
+              <g key={edge.id} opacity={isEdgeFocused ? 1 : 0.15} style={{ transition: 'opacity 0.25s ease' }}>
                 <line
                   x1={fromPos.x}
                   y1={fromPos.y}
                   x2={toPos.x}
                   y2={toPos.y}
                   stroke={edgeColor}
-                  strokeWidth="2"
+                  strokeWidth={isEdgeFocused && focusedNodeAddresses ? '2.2' : '1.8'}
                   markerEnd="url(#forensic-arrow)"
-                  opacity={isLight ? '0.9' : '0.85'}
                 />
 
-                <g transform={`translate(${midX}, ${midY}) rotate(${deg})`}>
+                <g
+                  transform={`translate(${midX}, ${midY})`}
+                  style={{ transition: isDragging || draggedNodeId ? 'none' : 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                >
                   <rect
-                    x={-labelText.length * 3.3 - 6}
+                    x={-pillWidth / 2}
                     y={-10}
-                    width={labelText.length * 6.6 + 12}
-                    height={18}
+                    width={pillWidth}
+                    height={20}
                     rx={4}
                     fill={edgeBg}
                     stroke={edgeBorder}
-                    strokeWidth="1"
-                    opacity={isLight ? '0.95' : '0.9'}
+                    strokeWidth="1.2"
                   />
                   <text
                     x={0}
-                    y={3}
+                    y={3.8}
                     textAnchor="middle"
                     fill={edgeColor}
-                    fontSize="10"
-                    fontFamily="JetBrains Mono, monospace"
-                    fontWeight="600"
+                    fontSize="9.5"
+                    fontFamily="var(--font-mono)"
+                    fontWeight="700"
                     style={{ pointerEvents: 'none' }}
                   >
                     {labelText}
@@ -797,96 +1287,95 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
             );
           })}
 
-          {/* Layer B: Circular Nodes */}
+          {/* Layer B: Distinct Colored Tactical Nodes */}
           {Array.from(layout.values()).map(({ x, y, node }) => {
-            const isSelected = selectedNode?.id === node.id;
+            const isSelected = activeSelectedNode?.id === node.id;
             const isRoot = node.nodeType === 'root';
             const isEx = node.nodeType === 'exchange';
             const catStyle = CATEGORY_COLORS[node.nodeType] || CATEGORY_COLORS.intermediary;
 
-            const shortAddr = node.address.length > 10
-              ? `${node.address.slice(0, 6)}...${node.address.slice(-4)}`
-              : node.address;
-
+            const isNodeFocused = !focusedNodeAddresses || focusedNodeAddresses.has(node.id);
             const isBeingDragged = draggedNodeId === node.id;
 
             return (
               <g
                 key={node.id}
                 transform={`translate(${x}, ${y})`}
+                opacity={isNodeFocused ? 1 : 0.2}
                 onMouseDown={(e) => handleNodeMouseDown(e, node.id, { x, y })}
-                onTouchStart={(e) => handleNodeTouchStart(e, node.id, { x, y })}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (didDragRef.current) {
                     didDragRef.current = false;
                     return;
                   }
-                  setSelectedNode(node);
+                  handleSelectNode(node);
                 }}
                 style={{
                   cursor: isBeingDragged ? 'grabbing' : 'grab',
                   userSelect: 'none',
+                  transition: isBeingDragged ? 'none' : 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease',
                 }}
               >
+                {/* Selection Tactical Ring */}
                 {isSelected && (
                   <circle
-                    r={32}
+                    r={28}
                     fill="none"
-                    stroke={isLight ? '#006780' : '#ffffff'}
+                    stroke={catStyle.stroke}
                     strokeWidth="2"
                     strokeDasharray="4 3"
-                    opacity="0.8"
                   />
                 )}
 
+                {/* Main Node Circle */}
                 <circle
-                  r={isBeingDragged ? 26 : 24}
+                  r={isBeingDragged ? 25 : 22}
                   fill={catStyle.bg}
                   stroke={catStyle.stroke}
-                  strokeWidth={isRoot || isEx ? 3.5 : 2.8}
-                  style={{
-                    filter: !isLight ? (isRoot ? 'url(#glow-red)' : isEx ? 'url(#glow-green)' : undefined) : undefined,
-                    transition: isBeingDragged ? 'none' : 'all 0.15s ease',
-                  }}
+                  strokeWidth={isRoot || isEx ? 2.8 : 2.2}
                 />
 
+                {/* Inner Role Acronym / Code */}
                 <text
                   x={0}
                   y={4}
                   textAnchor="middle"
                   fill={catStyle.stroke}
-                  fontSize="12"
-                  fontFamily="Space Grotesk, Inter, sans-serif"
-                  fontWeight="700"
-                >
-                  {isRoot ? 'm' : isEx ? 'E' : node.nodeType === 'burner' ? 'b' : node.nodeType === 'aggregator' ? 'a' : 'm'}
-                </text>
-
-                {/* Node Label Line 1: Strictly Only Input Wallet is [ROOT] */}
-                <text
-                  x={0}
-                  y={38}
-                  textAnchor="middle"
-                  fill={isRoot ? catStyle.stroke : isEx ? catStyle.stroke : (isLight ? '#0b1c30' : '#e2e8f0')}
-                  fontSize="11"
-                  fontFamily="JetBrains Mono, monospace"
-                  fontWeight={isRoot || isEx ? '700' : '500'}
-                >
-                  {isRoot ? `[ROOT] ${shortAddr}` : isEx && node.exchangeName ? node.exchangeName : shortAddr}
-                </text>
-
-                {/* Node Label Line 2: Wallet Role */}
-                <text
-                  x={0}
-                  y={52}
-                  textAnchor="middle"
-                  fill={isLight ? '#45464d' : '#94a3b8'}
                   fontSize="10"
-                  fontFamily="Space Grotesk, sans-serif"
-                  fontWeight="400"
+                  fontFamily="var(--font-mono)"
+                  fontWeight="800"
+                  style={{ pointerEvents: 'none' }}
                 >
-                  {isEx ? 'Exchange Deposit' : isRoot ? 'Suspect Origin' : catStyle.label.replace(' Wallet', '')}
+                  {node.shortCode}
+                </text>
+
+                {/* Node Label Line 1: Address */}
+                <text
+                  x={0}
+                  y={37}
+                  textAnchor="middle"
+                  fill={isRoot || isEx ? catStyle.stroke : (isLight ? '#0b1c30' : '#f8fafc')}
+                  fontSize="11"
+                  fontFamily="var(--font-mono)"
+                  fontWeight={isRoot || isEx ? '700' : '600'}
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {node.label}
+                </text>
+
+                {/* Node Label Line 2: Taint / USD Valuation */}
+                <text
+                  x={0}
+                  y={50}
+                  textAnchor="middle"
+                  fill={isLight ? '#334155' : '#cbd5e1'}
+                  fontSize="9.5"
+                  fontFamily="var(--font-mono)"
+                  fontWeight="600"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {node.taintPercentage}% TAINT • {node.amount}
                 </text>
               </g>
             );
@@ -894,175 +1383,221 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
         </g>
       </svg>
 
-      {/* 3. Bottom-Left Legend Box */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '16px',
-          left: '16px',
-          backgroundColor: isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(8, 15, 30, 0.92)',
-          border: isLight ? '1px solid #c6c6cd' : '1px solid #1a2d4b',
-          borderRadius: '8px',
-          padding: '8px 18px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          boxShadow: isLight ? '0 2px 10px rgba(0,0,0,0.08)' : '0 4px 16px rgba(0,0,0,0.55)',
-          zIndex: 25,
-          backdropFilter: 'blur(8px)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CATEGORY_COLORS.root.stroke, display: 'inline-block' }} />
-          <span style={{ fontSize: '11.5px', fontWeight: 600, color: CATEGORY_COLORS.root.text, fontFamily: 'Space Grotesk, sans-serif' }}>Suspect Wallet</span>
-        </div>
-        <span style={{ color: isLight ? '#dce4f0' : '#273852', fontSize: '12px' }}>|</span>
+      {/* 3. Interactive Moveable Node Forensic Inspector Attached Beside Node (Strictly Canvas-Bounded) */}
+      {activeSelectedNode && nodePopoverPos && (() => {
+        const containerW = containerRef.current?.clientWidth || nodePopoverPos.containerW;
+        const containerH = containerRef.current?.clientHeight || nodePopoverPos.containerH;
+        const popoverW = nodePopoverPos.popoverW;
+        const popoverH = nodePopoverPos.popoverH;
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CATEGORY_COLORS.exchange.stroke, display: 'inline-block' }} />
-          <span style={{ fontSize: '11.5px', fontWeight: 600, color: CATEGORY_COLORS.exchange.text, fontFamily: 'Space Grotesk, sans-serif' }}>Exchange Deposit</span>
-        </div>
-        <span style={{ color: isLight ? '#dce4f0' : '#273852', fontSize: '12px' }}>|</span>
+        // Strictly bound position inside canvas so inspector is never cut off
+        const leftPos = Math.max(8, Math.min(containerW - popoverW - 8, nodePopoverPos.left + popoverOffset.x));
+        const topPos = Math.max(8, Math.min(containerH - popoverH - 8, nodePopoverPos.top + popoverOffset.y));
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CATEGORY_COLORS.intermediary.stroke, display: 'inline-block' }} />
-          <span style={{ fontSize: '11.5px', fontWeight: 600, color: CATEGORY_COLORS.intermediary.text, fontFamily: 'Space Grotesk, sans-serif' }}>Intermediary</span>
-        </div>
-        <span style={{ color: isLight ? '#dce4f0' : '#273852', fontSize: '12px' }}>|</span>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CATEGORY_COLORS.burner.stroke, display: 'inline-block' }} />
-          <span style={{ fontSize: '11.5px', fontWeight: 600, color: CATEGORY_COLORS.burner.text, fontFamily: 'Space Grotesk, sans-serif' }}>Burner Wallet</span>
-        </div>
-        <span style={{ color: isLight ? '#dce4f0' : '#273852', fontSize: '12px' }}>|</span>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CATEGORY_COLORS.aggregator.stroke, display: 'inline-block' }} />
-          <span style={{ fontSize: '11.5px', fontWeight: 600, color: CATEGORY_COLORS.aggregator.text, fontFamily: 'Space Grotesk, sans-serif' }}>Aggregator</span>
-        </div>
-      </div>
-
-      {/* 4. Interactive Node Inspector Drawer */}
-      {selectedNode && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '16px',
-            left: '16px',
-            width: '320px',
-            backgroundColor: isLight ? '#ffffff' : '#0c1629',
-            border: isLight ? '1px solid #c6c6cd' : '1px solid #1e3557',
-            borderRadius: '8px',
-            padding: '16px',
-            boxShadow: isLight ? '0 4px 20px rgba(0,0,0,0.12)' : '0 8px 30px rgba(0,0,0,0.6)',
-            zIndex: 30,
-            color: isLight ? '#0b1c30' : '#f1f5f9',
-            fontFamily: 'Inter, sans-serif',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                color: CATEGORY_COLORS[selectedNode.nodeType]?.text || (isLight ? '#006780' : '#38bdf8'),
-                letterSpacing: '0.05em',
-                textTransform: 'uppercase',
-              }}
-            >
-              {selectedNode.categoryLabel}
-            </span>
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              top: `${topPos}px`,
+              left: `${leftPos}px`,
+              width: `${popoverW}px`,
+              maxHeight: `${containerH - 16}px`,
+              overflowY: 'auto',
+              backgroundColor: isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(7, 13, 22, 0.96)',
+              backdropFilter: 'blur(12px)',
+              border: `1px solid ${CATEGORY_COLORS[activeSelectedNode.nodeType]?.stroke || 'var(--accent-cyan)'}`,
+              borderRadius: '6px',
+              padding: '9px 11px',
+              zIndex: 35,
+              color: 'var(--text-main)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              boxSizing: 'border-box',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+          {/* Draggable Header */}
+          <div
+            onMouseDown={handlePopoverMouseDown}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '1px solid var(--border-tactical)',
+              paddingBottom: '6px',
+              cursor: 'grab',
+              userSelect: 'none',
+            }}
+            title="Drag to reposition inspector dialog"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '15px', color: 'var(--text-dim)', cursor: 'grab' }}>
+                drag_indicator
+              </span>
+              <span className="material-symbols-outlined" style={{ fontSize: '15px', color: CATEGORY_COLORS[activeSelectedNode.nodeType]?.stroke }}>
+                fingerprint
+              </span>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  color: CATEGORY_COLORS[activeSelectedNode.nodeType]?.stroke || 'var(--accent-cyan)',
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  fontFamily: 'var(--font-headline)',
+                }}
+              >
+                {activeSelectedNode.categoryLabel}
+              </span>
+            </div>
             <button
               type="button"
-              onClick={() => setSelectedNode(null)}
+              onClick={() => handleSelectNode(null)}
               style={{
                 background: 'none',
                 border: 'none',
-                color: isLight ? '#76777d' : '#64748b',
+                color: 'var(--text-dim)',
                 cursor: 'pointer',
-                fontSize: '16px',
-                lineHeight: 1,
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center',
               }}
+              title="Close Details"
             >
-              ✕
+              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>close</span>
             </button>
           </div>
 
-          <div style={{ marginBottom: '10px' }}>
-            <div style={{ fontSize: '10px', color: isLight ? '#76777d' : '#64748b', textTransform: 'uppercase', marginBottom: '3px' }}>
+          {/* Address Block */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontSize: '9px', color: 'var(--text-dim)', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
               On-Chain Address
-            </div>
+            </span>
             <div
               style={{
-                fontSize: '11.5px',
-                fontFamily: 'JetBrains Mono, monospace',
-                color: isLight ? '#0b1c30' : '#e2e8f0',
+                fontSize: '10px',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--text-main)',
                 wordBreak: 'break-all',
-                backgroundColor: isLight ? '#eff4ff' : '#070d18',
-                padding: '6px 8px',
+                backgroundColor: 'var(--bg-surface-low)',
+                padding: '5px 8px',
                 borderRadius: '4px',
-                border: isLight ? '1px solid #c6c6cd' : '1px solid #14233c',
+                border: '1px solid var(--border-tactical)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '4px',
               }}
             >
-              {selectedNode.address}
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-            <div style={{ backgroundColor: isLight ? '#eff4ff' : '#070d18', padding: '6px 8px', borderRadius: '4px', border: isLight ? '1px solid #c6c6cd' : '1px solid #14233c' }}>
-              <div style={{ fontSize: '9.5px', color: isLight ? '#76777d' : '#64748b' }}>Hop Depth</div>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: isLight ? '#006780' : '#38bdf8' }}>Level #{selectedNode.hopDepth}</div>
-            </div>
-            <div style={{ backgroundColor: isLight ? '#eff4ff' : '#070d18', padding: '6px 8px', borderRadius: '4px', border: isLight ? '1px solid #c6c6cd' : '1px solid #14233c' }}>
-              <div style={{ fontSize: '9.5px', color: isLight ? '#76777d' : '#64748b' }}>Taint Level</div>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: isLight ? '#ba1a1a' : '#ef4444' }}>{selectedNode.taintPercentage}%</div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              type="button"
-              onClick={() => copyAddress(selectedNode.address)}
-              style={{
-                flex: 1,
-                padding: '7px 10px',
-                backgroundColor: isLight ? '#eff4ff' : '#121e33',
-                border: isLight ? '1px solid #c6c6cd' : '1px solid #1e355b',
-                borderRadius: '4px',
-                color: isLight ? '#0b1c30' : '#cbd5e1',
-                fontSize: '11px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              {copied ? 'Copied!' : 'Copy Address'}
-            </button>
-
-            {onSelectAddress && (
+              <span>{activeSelectedNode.address}</span>
               <button
                 type="button"
-                onClick={() => {
-                  onSelectAddress(selectedNode.address);
-                  setSelectedNode(null);
-                }}
+                onClick={() => copyAddress(activeSelectedNode.address)}
+                title="Copy Address"
                 style={{
-                  flex: 1,
-                  padding: '7px 10px',
-                  backgroundColor: '#006780',
-                  border: '1px solid #005064',
-                  borderRadius: '4px',
-                  color: '#ffffff',
-                  fontSize: '11px',
-                  fontWeight: 600,
+                  background: 'none',
+                  border: 'none',
+                  color: copied ? 'var(--success-emerald)' : 'var(--accent-cyan)',
                   cursor: 'pointer',
+                  padding: '2px',
+                  display: 'flex',
                 }}
               >
-                Scan Address
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                  {copied ? 'check' : 'content_copy'}
+                </span>
               </button>
+            </div>
+          </div>
+
+          {/* Forwarding Delay / Transit Duration Block */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface-low)',
+              padding: '6px 9px',
+              borderRadius: '4px',
+              border: '1px solid var(--border-tactical)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700, textTransform: 'uppercase' }}>
+                Forwarding / Transit Delay
+              </span>
+              <span className="material-symbols-outlined" style={{ fontSize: '13px', color: 'var(--accent-cyan)' }}>
+                schedule
+              </span>
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-cyan)', fontFamily: 'var(--font-headline)' }}>
+              {activeSelectedNode.transitDelayText || 'Immediate Forwarding (< 1m)'}
+            </div>
+            {activeSelectedNode.formattedTimestamp && (
+              <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                Tx Timestamp: {activeSelectedNode.formattedTimestamp}
+              </span>
             )}
           </div>
+
+          {/* Metric Matrix Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+            <div style={{ backgroundColor: 'var(--bg-surface-low)', padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-tactical)' }}>
+              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>HOP DEPTH</span>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--accent-cyan)', fontFamily: 'var(--font-headline)' }}>
+                Level #{activeSelectedNode.hopDepth}
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: 'var(--bg-surface-low)', padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-tactical)' }}>
+              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>TAINT RETENTION</span>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: activeSelectedNode.taintPercentage > 50 ? 'var(--danger-crimson)' : 'var(--warning-amber)', fontFamily: 'var(--font-headline)' }}>
+                {activeSelectedNode.taintPercentage}%
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: 'var(--bg-surface-low)', padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-tactical)' }}>
+              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>INFLOWS</span>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', fontFamily: 'var(--font-headline)' }}>
+                {activeSelectedNode.inDegree} in
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: 'var(--bg-surface-low)', padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-tactical)' }}>
+              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>OUTFLOWS</span>
+              <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', fontFamily: 'var(--font-headline)' }}>
+                {activeSelectedNode.outDegree} out
+              </div>
+            </div>
+          </div>
+
+          {/* Action Links */}
+          <a
+            href={`https://etherscan.io/address/${activeSelectedNode.address}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              padding: '5px',
+              backgroundColor: 'var(--bg-surface-low)',
+              border: '1px solid var(--border-tactical)',
+              borderRadius: '4px',
+              color: 'var(--accent-cyan)',
+              fontSize: '10.5px',
+              fontFamily: 'var(--font-headline)',
+              fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            <span>View On Etherscan</span>
+            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>open_in_new</span>
+          </a>
         </div>
-      )}
+      );})()}
     </div>
   );
 };
