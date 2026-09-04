@@ -24,7 +24,6 @@ export const ProgressPage: React.FC = () => {
         margin: '2rem auto',
         maxWidth: '680px',
         border: '1px solid var(--border-cyan)',
-        boxShadow: '0 0 30px rgba(6, 182, 212, 0.15)',
       }}
     >
       <div

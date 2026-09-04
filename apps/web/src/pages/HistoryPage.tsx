@@ -123,10 +123,6 @@ export const HistoryPage: React.FC = () => {
             Immutable on-chain forensic snapshot history persisted with cryptographic Merkle stamps.
           </p>
         </div>
-
-        <Link to="/" className="btn-tactical btn-tactical-primary">
-          + Start New Investigation
-        </Link>
       </div>
 
       {/* History Table */}
@@ -164,7 +160,8 @@ export const HistoryPage: React.FC = () => {
                     key={item.id}
                     style={{
                       borderBottom: '1px solid var(--border-subtle)',
-                      backgroundColor: idx % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-surface-low)',
+                      backgroundColor: 'var(--bg-surface)',
+                      transition: 'background-color 0.15s ease',
                     }}
                   >
                     <td style={{ padding: '0.85rem 1rem' }}>

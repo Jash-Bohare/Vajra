@@ -1,1637 +1,1031 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { SubpoenaModal } from '../components/SubpoenaModal';
 import { exportInvestigationPdf } from '../utils/PdfExporter';
 import { ForensicTreeGraph } from '../components/ForensicTreeGraph';
-
-interface HopData {
-  hopNumber: number;
-  stageName: string;
-  stageBadgeBg: string;
-  stageBadgeText: string;
-  title: string;
-  taintText: string;
-  taintColor: string;
-  address: string;
-  fullAddress: string;
-  volLabel: string;
-  volValue: string;
-  volColor?: string;
-  metaLabel: string;
-  metaValue: string;
-  metaColor?: string;
-  connectorText?: string;
-  connectorType?: 'peel' | 'router' | 'deposit';
-  txHash: string;
-  fullTxHash: string;
-  time: string;
-  stageLabel: string;
-}
+import { BranchSummaryCard } from '../components/BranchSummaryCard';
+import { InvestigatorActionCard } from '../components/InvestigatorActionCard';
+import { TokenBadge } from '../components/TokenBadge';
+import { useTheme } from '../context/ThemeContext';
 
 export const AttributionTerminal: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
 
-  const [loading, setLoading] = useState(false);
-  const [loadingStage, setLoadingStage] = useState('Connecting to Etherscan V2 Archive Nodes...');
+  const [loading, setLoading] = useState(true);
+  const [loadingStage, setLoadingStage] = useState('Connecting to forensic datastore...');
   const [error, setError] = useState<string | null>(null);
   const [investigationData, setInvestigationData] = useState<any>(null);
   const [subpoenaOpen, setSubpoenaOpen] = useState(false);
-  const [activeHopDepth, setActiveHopDepth] = useState('HOP 0 → HOP 3');
-  const [taintFilterActive, setTaintFilterActive] = useState(true);
-  const [viewMode, setViewMode] = useState<'tree' | 'linear'>('tree');
-  const [targetInput, setTargetInput] = useState('');
-  const [victimTxInput, setVictimTxInput] = useState('');
+  const [layoutMode, setLayoutMode] = useState<'dag' | 'tree'>('dag');
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'branches' | 'ledger' | 'playbook' | 'all'>('branches');
+  const [copiedText, setCopiedText] = useState<string | null>(null);
 
-  // Default target wallet fallback for initial demo trace if DB has zero prior investigations
-  const DEFAULT_TARGET_WALLET = '0x0d694430b5e34d65aa04a23d38b74c9f4f60342b';
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(label);
+    setTimeout(() => setCopiedText(null), 2000);
+  };
 
-  // Function to execute real-time Etherscan on-chain trace
-  const runRealtimeTrace = useCallback(async (walletAddr: string, victimTx?: string) => {
-    if (!walletAddr || !walletAddr.trim()) return;
+  // Fetch investigation record by ID from API
+  useEffect(() => {
     setLoading(true);
     setError(null);
-    setLoadingStage('Querying Etherscan V2 API for on-chain transactions...');
 
-    try {
-      // 1. Dispatch real-time investigation to API orchestrator
-      const createRes = await fetch('/api/investigations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          walletAddress: walletAddr.trim(),
-          victimTxHash: victimTx?.trim() || undefined,
-        }),
-      });
-
-      if (!createRes.ok) {
-        const errData = await createRes.json();
-        throw new Error(errData.error || 'Failed to dispatch on-chain trace.');
-      }
-
-      setLoadingStage('Evaluating BFS multi-branch tree & Python AML risk rules...');
-      const createData = await createRes.json();
-      const investigationId = createData.investigationId;
-
-      // 2. Fetch completed investigation details from Supabase DB
-      const detailRes = await fetch(`/api/investigations/${investigationId}`);
-      if (!detailRes.ok) {
-        throw new Error('Failed to retrieve completed investigation record.');
-      }
-
-      const detailData = await detailRes.json();
-      setInvestigationData(detailData);
-      if (detailData?.walletAddress) setTargetInput(detailData.walletAddress);
-      navigate(`/?id=${investigationId}`, { replace: true });
-    } catch (err: any) {
-      console.error('[AttributionTerminal] Trace error:', err);
-      setError(err.message || 'Error executing real-time on-chain trace.');
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate]);
-
-  // Fetch or execute investigation on mount or URL change
-  useEffect(() => {
-    const targetId = id || searchParams.get('id');
-    const targetQuery = searchParams.get('q');
-
-    if (targetId) {
-      setLoading(true);
-      setLoadingStage('Loading forensic dossier from Supabase PostgreSQL...');
-      fetch(`/api/investigations/${targetId}`)
+    if (id) {
+      setLoadingStage('Loading forensic case dossier from database...');
+      fetch(`/api/investigations/${id}`)
         .then((res) => {
           if (!res.ok) throw new Error('Investigation record not found in database.');
           return res.json();
         })
         .then((data) => {
           setInvestigationData(data);
-          if (data?.walletAddress) setTargetInput(data.walletAddress);
         })
         .catch((err) => {
           console.error('[AttributionTerminal] Load error:', err);
-          setError('Could not load specified case. Please enter a wallet to scan.');
+          setError('Could not load investigation dossier. Please select a case from History.');
         })
         .finally(() => setLoading(false));
-    } else if (targetQuery && /^0x[a-fA-F0-9]{40}$/.test(targetQuery.trim())) {
-      setTargetInput(targetQuery.trim());
-      runRealtimeTrace(targetQuery.trim());
     } else {
-      // Ingest live from Supabase DB: load most recent investigation
-      setLoading(true);
-      setLoadingStage('Connecting to Supabase database for latest case...');
+      setLoadingStage('Retrieving most recent investigation from session...');
       fetch('/api/investigations')
         .then((res) => res.json())
         .then((history) => {
           if (Array.isArray(history) && history.length > 0 && history[0].id) {
-            setLoadingStage('Loading case record from Supabase...');
-            return fetch(`/api/investigations/${history[0].id}`).then((r) => r.json());
-          }
-          return null;
-        })
-        .then((detail) => {
-          if (detail) {
-            setInvestigationData(detail);
-            if (detail.walletAddress) setTargetInput(detail.walletAddress);
+            navigate(`/investigations/${history[0].id}`, { replace: true });
           } else {
-            // If Supabase has zero investigations, run real-time trace on default target
-            runRealtimeTrace(DEFAULT_TARGET_WALLET);
+            navigate('/', { replace: true });
           }
         })
         .catch((err) => {
-          console.warn('[AttributionTerminal] DB history load note:', err);
-          runRealtimeTrace(DEFAULT_TARGET_WALLET);
-        })
-        .finally(() => setLoading(false));
+          console.warn('[AttributionTerminal] History fetch fallback:', err);
+          navigate('/', { replace: true });
+        });
     }
-  }, [id, searchParams, runRealtimeTrace]);
+  }, [id, navigate]);
 
-  // Derived real-time fields
+  // Derived fields
   const data = investigationData;
   const rawHops = data?.hops || [];
-  const ethRate = data?.ethPriceUsd || data?.tree?.ethPriceUsd || data?.graph?.ethPriceUsd || 2442;
+  const ethRate = data?.ethPriceUsd || data?.tree?.ethPriceUsd || data?.graph?.ethPriceUsd || 2442.15;
   const targetAsset = data?.targetAsset || 'ETH';
+  const suspectWallet = data?.walletAddress || '0x0000000000000000000000000000000000000000';
+  const isExchange = data?.terminalType === 'exchange' || Boolean(data?.terminalExchange);
+  const terminalExName = data?.terminalExchange || (isExchange ? 'Verified VASP Exit' : 'Uncataloged Hot Wallet');
 
-  // Compute real Total Tracked Loss from root transaction
+  // Loss and Valuation Calculations
   const rootHop = rawHops[0];
   const rootAmount = rootHop ? (rootHop.tokenAmount || rootHop.amountEth || parseFloat(rootHop.value) || 0) : 0;
   const totalLossUsd = data?.victimAmountUsd || rootHop?.usdValue || (rootAmount > 0 ? Math.round(rootAmount * (targetAsset === 'ETH' ? ethRate : 1)) : 0);
 
-  // Compute retained taint dynamically from BFS branching
+  // Accurate per-edge / per-hop taint map linked from tree / graph data
+  const edgeTaintMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const edges = data?.tree?.edges || data?.graph?.edges || [];
+    edges.forEach((e: any) => {
+      const from = (e.from || '').toLowerCase();
+      const to = (e.to || '').toLowerCase();
+      if (e.taintPercentage !== undefined) {
+        map.set(`${from}_${to}`, e.taintPercentage);
+      }
+      if (e.txHash) {
+        map.set(e.txHash.toLowerCase(), e.taintPercentage ?? 0);
+      }
+    });
+    return map;
+  }, [data]);
+
   const finalHop = rawHops.length > 0 ? rawHops[rawHops.length - 1] : null;
-  const retainedTaint = finalHop?.taintPercentage !== undefined
-    ? `${finalHop.taintPercentage.toFixed(1)}%`
-    : rawHops.length > 0
-    ? `${Math.max(5, 100 - (rawHops.length - 1) * 8.5).toFixed(1)}%`
-    : '100.0%';
+  const finalHopFrom = (finalHop?.fromAddress || '').toLowerCase();
+  const finalHopTo = (finalHop?.toAddress || '').toLowerCase();
+  const finalHopTaint = finalHop?.taintPercentage
+    ?? edgeTaintMap.get(`${finalHopFrom}_${finalHopTo}`)
+    ?? (finalHop?.usdValue && totalLossUsd > 0 ? (finalHop.usdValue / totalLossUsd) * 100 : undefined)
+    ?? (rawHops.length > 0 ? Math.max(5, 100 - (rawHops.length - 1) * 8.5) : 100);
+  const retainedTaint = `${Number(finalHopTaint).toFixed(1)}%`;
 
-  // Terminal VASP detection from Supabase database
-  const isExchange = data?.terminalType === 'exchange' || Boolean(data?.terminalExchange);
-  const terminalExName = data?.terminalExchange || (isExchange ? 'Verified VASP Exit' : 'Uncataloged Hot Wallet');
-  const trappedUsd = isExchange && totalLossUsd > 0
-    ? `$${Math.round(totalLossUsd * (parseFloat(retainedTaint) / 100)).toLocaleString()} ${targetAsset} Trapped`
-    : isExchange
-    ? 'Verified VASP Custody'
-    : 'No VASP Custody Match';
+  const trappedValuationUsd = isExchange && totalLossUsd > 0
+    ? Math.round(totalLossUsd * (parseFloat(retainedTaint) / 100))
+    : totalLossUsd;
 
-  // AML Risk Score from Python service
   const riskScore = data?.riskScore || (data?.riskLevel === 'high' ? 94 : data?.riskLevel === 'medium' ? 58 : 22);
-  const riskSev = data?.riskReason || (riskScore >= 80 ? 'SEV 5 • PEEL + MIXER' : riskScore >= 50 ? 'SEV 3 • RAPID DISPERSION' : 'SEV 1 • LOW RISK');
+  const riskLevel = data?.riskLevel || (riskScore >= 80 ? 'high' : riskScore >= 50 ? 'medium' : 'low');
 
-  // Format dynamic hops into Stitch card structures
-  const hopsList: HopData[] = rawHops.length > 0
-    ? rawHops.map((hop: any, idx: number) => {
-        const isFirst = idx === 0;
-        const isLast = idx === rawHops.length - 1;
-        const hopNum = hop.hopIndex || idx;
-        const symbol = hop.tokenSymbol || targetAsset;
-
-        const valFormatted = hop.tokenAmount !== undefined
-          ? `${hop.tokenAmount.toLocaleString()} ${symbol}`
-          : hop.amountEth !== undefined
-          ? `${hop.amountEth.toFixed(4)} ETH`
-          : `${hop.value} ${symbol}`;
-
-        const stageName = isFirst
-          ? 'HOP 0 : ORIGIN'
-          : isLast
-          ? `HOP ${hopNum} : TERMINAL EXIT`
-          : `HOP ${hopNum} : ${hopNum === 1 ? 'RAPID PEEL' : 'MIXER RELAY'}`;
-
-        const stageBadgeBg = isFirst ? '#000000' : isLast ? '#006780' : hopNum === 1 ? '#ba1a1a' : '#76777d';
-
-        const title = isFirst
-          ? 'Victim Primary Treasury'
-          : isLast
-          ? (data?.terminalExchange ? `${data.terminalExchange} Custody Deposit Hot Wallet` : 'Terminal Deposit Hot Wallet')
-          : hopNum === 1
-          ? 'Unregistered Intermediate Swapper'
-          : 'Bridge Obfuscation Proxy';
-
-        const taintText = isLast
-          ? 'ACTIONABLE FREEZE'
-          : isFirst
-          ? '100% TAINT'
-          : hop.taintPercentage !== undefined
-          ? `${hop.taintPercentage.toFixed(1)}% TAINT`
-          : `${Math.max(10, 100 - hopNum * 11).toFixed(1)}% TAINT`;
-
-        const connectorText = isFirst
-          ? `PEEL SPLIT: -${valFormatted} (Main Taint)`
-          : hopNum === 1
-          ? 'TORNADO RELAY ROUTER IDENTIFIED'
-          : 'DEPOSIT AGGREGATION: EXTERNAL INFLOWS';
-
-        const shortTo = hop.toAddress
-          ? `${hop.toAddress.substring(0, 6)}...${hop.toAddress.substring(hop.toAddress.length - 4)}`
-          : '0x0000...0000';
-
-        const shortTx = hop.txHash
-          ? `${hop.txHash.substring(0, 6)}...${hop.txHash.substring(hop.txHash.length - 4)}`
-          : '0x0000...0000';
-
-        const timeStr = hop.txTimestamp
-          ? new Date(hop.txTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' UTC'
-          : '14:22 UTC';
-
-        return {
-          hopNumber: hopNum,
-          stageName,
-          stageBadgeBg,
-          stageBadgeText: '#ffffff',
-          title,
-          taintText,
-          taintColor: isLast ? '#ffffff' : '#ba1a1a',
-          address: shortTo,
-          fullAddress: hop.toAddress,
-          volLabel: isFirst ? 'INITIAL SIPHON' : isLast ? 'UNCLAIMED BALANCE' : 'INTERCEPTED SUM',
-          volValue: valFormatted,
-          volColor: isFirst ? '#ba1a1a' : isLast ? '#006780' : '#0b1c30',
-          metaLabel: isFirst ? 'TIMESTAMP (UTC)' : isLast ? 'VASP IDENTIFIER' : 'TX COUNT / LATENCY',
-          metaValue: isFirst
-            ? (hop.txTimestamp ? new Date(hop.txTimestamp).toLocaleTimeString() : '14:22:04')
-            : isLast
-            ? `UID: ${data?.id ? data.id.substring(0, 8) : '98128492'}`
-            : '14 Tx / 19m delay',
-          connectorText: isLast ? undefined : connectorText,
-          connectorType: isFirst ? 'peel' : hopNum === 1 ? 'router' : 'deposit',
-          txHash: shortTx,
-          fullTxHash: hop.txHash,
-          time: timeStr,
-          stageLabel: isFirst ? 'BREACH' : isLast ? 'VASP IN' : `PEEL ${hopNum}`,
-        };
-      })
-    : [];
-
-  const handleExportPdf = () => {
-    if (data) {
-      exportInvestigationPdf(data);
-    } else {
-      alert('Generating Section 65B Certificate with real-time digital custody seal...');
-    }
-  };
-
-  const evidenceHash = useMemo(() => {
-    if (!data?.id && !data?.walletAddress) return 'STANDBY-AUTH';
-    const raw = `${data?.id || ''}_${data?.walletAddress || ''}_${data?.victimTxHash || ''}`;
+  const evidenceMerkleHash = useMemo(() => {
+    if (!data?.id) return 'STANDBY-AUTH';
+    const raw = `${data.id}_${suspectWallet}_${data.createdAt || ''}`;
     let hash = 0;
     for (let i = 0; i < raw.length; i++) {
       hash = (hash << 5) - hash + raw.charCodeAt(i);
       hash |= 0;
     }
     const hex = Math.abs(hash).toString(16).padStart(8, '0');
-    return `${hex.substring(0, 4)}...${hex.substring(hex.length - 4)}`;
-  }, [data?.id, data?.walletAddress, data?.victimTxHash]);
+    return `0x${hex.substring(0, 4)}...${hex.substring(hex.length - 4)}`.toUpperCase();
+  }, [data?.id, suspectWallet, data?.createdAt]);
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', padding: '0 0 24px 0' }}>
-      {/* 0. Target Suspect Wallet Entry Portal (Top Hero Card) */}
+  const handleExportPdf = () => {
+    if (data) {
+      exportInvestigationPdf(data);
+    }
+  };
+
+  const ROLE_DEFINITIONS = [
+    {
+      role: 'Suspect Origin',
+      code: 'ROOT',
+      color: isLight ? '#dc2626' : '#ef4444',
+      meaning: 'Inception wallet initiated fund theft',
+      action: 'Anchor root transaction hash in FIR',
+    },
+    {
+      role: 'VASP Exchange Exit',
+      code: 'VASP',
+      color: isLight ? '#047857' : '#10b981',
+      meaning: 'Verified exchange deposit endpoint',
+      action: 'Issue Section 91 Cr.P.C. subpoena notice',
+    },
+    {
+      role: 'Peeling Intermediary',
+      code: 'H1 / H2',
+      color: isLight ? '#0284c7' : '#00e5ff',
+      meaning: 'Intermediate transit relay wallet',
+      action: 'Track subsequent outbound hops',
+    },
+    {
+      role: 'Mixer / Aggregator',
+      code: 'AGG',
+      color: isLight ? '#7c3aed' : '#c084fc',
+      meaning: 'Consolidation wallet (2+ inflows)',
+      action: 'Identify pooled outgoing disbursements',
+    },
+    {
+      role: 'Burner / Dust Leaf',
+      code: 'LEAF',
+      color: isLight ? '#b45309' : '#f59e0b',
+      meaning: 'Terminal endpoint holding dust balance',
+      action: 'Mark branch as closed / residual leaf',
+    },
+  ];
+
+  if (loading) {
+    return (
       <div
         style={{
-          backgroundColor: '#ffffff',
-          border: '1px solid #c6c6cd',
-          borderRadius: '4px',
-          padding: '16px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '64px 20px',
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--border-tactical)',
+          borderRadius: '6px',
+          maxWidth: '650px',
+          margin: '40px auto',
+          textAlign: 'center',
+          gap: '14px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '20px', color: '#006780' }}>
-              radar
-            </span>
-            <span style={{ fontFamily: 'Space Grotesk', fontSize: '14px', fontWeight: 700, color: '#0b1c30', textTransform: 'uppercase' }}>
-              TARGET SUSPECT WALLET ON-CHAIN INVESTIGATION ENTRY
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '2px 8px',
-                backgroundColor: '#eff4ff',
-                borderRadius: '2px',
-                border: '1px solid #c6c6cd',
-                fontFamily: 'JetBrains Mono',
-                fontSize: '10px',
-                color: '#006780',
-                fontWeight: 600,
-              }}
-            >
-              <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#00876c' }} />
-              ETHERSCAN V2 ARCHIVE: ONLINE
-            </span>
-            <span
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '2px 8px',
-                backgroundColor: '#eff4ff',
-                borderRadius: '2px',
-                border: '1px solid #c6c6cd',
-                fontFamily: 'JetBrains Mono',
-                fontSize: '10px',
-                color: '#45464d',
-                fontWeight: 600,
-              }}
-            >
-              <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#006780' }} />
-              SUPABASE DB: CONNECTED
-            </span>
-          </div>
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (targetInput.trim()) {
-              runRealtimeTrace(targetInput.trim(), victimTxInput.trim() || undefined);
-            }
-          }}
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '12px',
-            alignItems: 'flex-end',
-          }}
+        <span
+          className="material-symbols-outlined"
+          style={{ fontSize: '32px', color: 'var(--accent-cyan)', animation: 'spin 1s linear infinite' }}
         >
-          <div style={{ flex: '2 1 340px' }}>
-            <label style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d', display: 'block', marginBottom: '4px' }}>
-              SUSPECT EVM WALLET ADDRESS (INSERT TO SCAN):
-            </label>
-            <input
-              type="text"
-              value={targetInput}
-              onChange={(e) => setTargetInput(e.target.value)}
-              placeholder="Paste suspect Ethereum address (0x...) to trace live..."
-              style={{
-                width: '100%',
-                padding: '9px 12px',
-                fontFamily: 'JetBrains Mono',
-                fontSize: '12px',
-                color: '#0b1c30',
-                backgroundColor: '#f8f9ff',
-                border: '1px solid #c6c6cd',
-                borderRadius: '3px',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-
-          <div style={{ flex: '1.5 1 260px' }}>
-            <label style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d', display: 'block', marginBottom: '4px' }}>
-              VICTIM INCEPTION TX HASH (OPTIONAL):
-            </label>
-            <input
-              type="text"
-              value={victimTxInput}
-              onChange={(e) => setVictimTxInput(e.target.value)}
-              placeholder="0x... (pins inception block)"
-              style={{
-                width: '100%',
-                padding: '9px 12px',
-                fontFamily: 'JetBrains Mono',
-                fontSize: '12px',
-                color: '#0b1c30',
-                backgroundColor: '#f8f9ff',
-                border: '1px solid #c6c6cd',
-                borderRadius: '3px',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading || !targetInput.trim()}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: loading ? '#76777d' : '#000000',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '3px',
-                fontFamily: 'Space Grotesk',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.12)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#4cd7f6' }}>
-                {loading ? 'sync' : 'play_arrow'}
-              </span>
-              <span>{loading ? 'INGESTING ON-CHAIN...' : 'DISPATCH ON-CHAIN SCAN'}</span>
-            </button>
-          </div>
-        </form>
-
-        {/* Quick Sample Chips */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', paddingTop: '2px' }}>
-          <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d' }}>
-            LIVE TEST TARGETS:
-          </span>
-          {[
-            { label: '11-NODE MULTI-HOP (BINANCE)', addr: '0x0d694430b5e34d65aa04a23d38b74c9f4f60342b' },
-            { label: 'USDT TRANSFER (999 USDT)', addr: '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1' },
-            { label: 'DEX ROUTING (UNISWAP)', addr: '0x2ea1a2b899dbc43f1c61c78a634817ef90ba1eca' },
-            { label: 'COINBASE DEPOSIT (10.99 ETH)', addr: '0x53ef6da5fc74cdef214367240b0d96c34231258d' },
-            { label: 'BINANCE DIRECT (0.05 ETH)', addr: '0x6f2d8b347dbfa187d1313338e0ff0120ca26a829' },
-            { label: 'MULTI-BRANCH FAN-OUT (USDC)', addr: '0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6' },
-            { label: 'FAN-IN HOURGLASS (USDT)', addr: '0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918' },
-          ].map((chip) => (
-            <button
-              key={chip.addr}
-              onClick={() => {
-                setTargetInput(chip.addr);
-                runRealtimeTrace(chip.addr);
-              }}
-              style={{
-                padding: '3px 8px',
-                backgroundColor: '#eff4ff',
-                border: '1px solid #c6c6cd',
-                borderRadius: '2px',
-                fontFamily: 'JetBrains Mono',
-                fontSize: '10px',
-                color: '#006780',
-                cursor: 'pointer',
-              }}
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
+          sync
+        </span>
+        <h2 style={{ fontFamily: 'var(--font-headline)', fontSize: '17px', fontWeight: 700, color: 'var(--text-main)' }}>
+          Retrieving Electronic Forensic Dossier...
+        </h2>
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-muted)' }}>
+          {loadingStage}
+        </p>
       </div>
+    );
+  }
 
-      {/* 1. Context Indicator & Top Breadcrumbs */}
+  if (error || !data) {
+    return (
       <div
         style={{
+          padding: '28px 24px',
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--danger-crimson)',
+          borderRadius: '6px',
+          maxWidth: '650px',
+          margin: '40px auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--danger-crimson)' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>error</span>
+          <h2 style={{ fontFamily: 'var(--font-headline)', fontSize: '17px', fontWeight: 700 }}>
+            Investigation Record Not Found
+          </h2>
+        </div>
+        <p style={{ fontFamily: 'var(--font-body)', fontSize: '13px', color: 'var(--text-muted)' }}>
+          {error || 'The requested forensic investigation could not be retrieved from the database.'}
+        </p>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <Link
+            to="/"
+            style={{
+              padding: '8px 16px',
+              backgroundColor: 'var(--accent-cyan)',
+              color: '#ffffff',
+              borderRadius: '4px',
+              textDecoration: 'none',
+              fontFamily: 'var(--font-headline)',
+              fontSize: '12.5px',
+              fontWeight: 700,
+            }}
+          >
+            Launch New Investigation
+          </Link>
+          <Link
+            to="/history"
+            style={{
+              padding: '8px 16px',
+              backgroundColor: 'var(--bg-surface-low)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--border-tactical)',
+              borderRadius: '4px',
+              textDecoration: 'none',
+              fontFamily: 'var(--font-headline)',
+              fontSize: '12.5px',
+              fontWeight: 600,
+            }}
+          >
+            Browse Case History
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', paddingBottom: '32px' }}>
+      {/* 1. Top Case Header & Action Banner */}
+      <div
+        style={{
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--border-tactical)',
+          borderRadius: '6px',
+          padding: '12px 18px',
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '12px 16px',
-          backgroundColor: '#ffffff',
-          border: '1px solid #c6c6cd',
-          borderRadius: '4px',
           gap: '12px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <span
             style={{
-              padding: '2px 8px',
-              backgroundColor: '#eff4ff',
-              color: '#45464d',
-              fontFamily: 'JetBrains Mono',
-              fontSize: '10px',
+              padding: '3px 8px',
+              backgroundColor: 'var(--bg-surface-low)',
+              color: 'var(--accent-cyan)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
               fontWeight: 700,
-              borderRadius: '2px',
-              border: '1px solid #c6c6cd',
+              borderRadius: '4px',
+              border: '1px solid var(--border-tactical)',
             }}
           >
-            DOSSIER #{data?.id ? data.id.substring(0, 8).toUpperCase() : 'DATABASE PENDING'}
+            CASE #{data.id ? data.id.substring(0, 8).toUpperCase() : 'LIVE-TRACE'}
           </span>
-          <span style={{ color: '#76777d' }}>/</span>
+
           <span
             style={{
-              fontFamily: 'Space Grotesk',
+              padding: '3px 8px',
+              backgroundColor: 'var(--bg-surface-low)',
+              color: 'var(--text-dim)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
               fontWeight: 600,
-              fontSize: '16px',
-              color: '#0b1c30',
-              textTransform: 'uppercase',
+              borderRadius: '4px',
+              border: '1px solid var(--border-subtle)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
             }}
+            title="Cryptographic Hash Root"
           >
-            On-Chain Fund Flow Attribution & Subpoena Gateway
+            <span className="material-symbols-outlined" style={{ fontSize: '13px', color: 'var(--accent-cyan)' }}>lock</span>
+            <span>MERKLE: {evidenceMerkleHash}</span>
           </span>
-          <div
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontFamily: 'var(--font-headline)', fontSize: '12.5px', fontWeight: 700, color: 'var(--text-main)' }}>
+              Suspect:
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--accent-cyan)', fontWeight: 600 }}>
+              {suspectWallet.substring(0, 8)}...{suspectWallet.substring(suspectWallet.length - 6)}
+            </span>
+            <button
+              onClick={() => copyToClipboard(suspectWallet, 'wallet')}
+              title="Copy Full Address"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: copiedText === 'wallet' ? 'var(--success-emerald)' : 'var(--text-dim)',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '2px',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                {copiedText === 'wallet' ? 'check' : 'content_copy'}
+              </span>
+            </button>
+            <a
+              href={`https://etherscan.io/address/${suspectWallet}`}
+              target="_blank"
+              rel="noreferrer"
+              title="View on Etherscan"
+              style={{ color: 'var(--text-dim)', display: 'flex', alignItems: 'center' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>open_in_new</span>
+            </a>
+          </div>
+
+          <TokenBadge symbol={targetAsset} />
+        </div>
+
+        {/* Header Action Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {isExchange && (
+            <button
+              onClick={() => setSubpoenaOpen(true)}
+              style={{
+                padding: '7px 14px',
+                background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                color: '#ffffff',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                borderRadius: '4px',
+                fontFamily: 'var(--font-headline)',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)';
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>gavel</span>
+              <span>Issue Subpoena</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleExportPdf}
             style={{
+              padding: '7px 14px',
+              backgroundColor: '#090d16',
+              color: '#ffffff',
+              border: '1px solid #1e293b',
+              borderRadius: '4px',
+              fontFamily: 'var(--font-headline)',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              backgroundColor: '#dce9ff',
-              padding: '4px 8px',
-              borderRadius: '2px',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#161f2e';
+              e.currentTarget.style.borderColor = '#334155';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#090d16';
+              e.currentTarget.style.borderColor = '#1e293b';
             }}
           >
-            <div
-              style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: rawHops.length > 0 ? '#ba1a1a' : '#76777d',
-                animation: rawHops.length > 0 ? 'live-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite' : 'none',
-              }}
-            />
-            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', fontWeight: 600, color: '#0b1c30' }}>
-              {rawHops.length > 0 ? 'HOT ASSET MOVEMENT DETECTED' : 'AWAITING WALLET INGESTION'}
-            </span>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontFamily: 'JetBrains Mono', fontSize: '12px', color: '#45464d' }}>
-            CHAIN: <strong style={{ color: '#0b1c30' }}>ETHEREUM MAINNET (EVM)</strong>
-          </span>
-          <button
-            onClick={() => runRealtimeTrace(targetInput || data?.walletAddress || DEFAULT_TARGET_WALLET)}
-            disabled={loading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '6px 10px',
-              backgroundColor: '#eff4ff',
-              color: '#0b1c30',
-              border: '1px solid #c6c6cd',
-              borderRadius: '2px',
-              fontFamily: 'JetBrains Mono',
-              fontSize: '10px',
-              fontWeight: 700,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              textTransform: 'uppercase',
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>sync</span>
-            <span>{loading ? 'TRACING...' : 'RE-RUN HEURISTICS'}</span>
+            <span className="material-symbols-outlined" style={{ fontSize: '15px', color: '#38bdf8' }}>shield_lock</span>
+            <span>Section 65B PDF</span>
           </button>
         </div>
       </div>
 
-      {/* Loading Banner when tracing Etherscan live */}
-      {loading && (
+      {/* 2. Compact 4-Card Forensic KPI Metric Strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
+        {/* Metric 1: Threat / Risk Level (First & Specially Highlighted) */}
         <div
           style={{
-            backgroundColor: '#eff4ff',
-            border: '1px solid #006780',
-            borderRadius: '4px',
-            padding: '12px 16px',
+            backgroundColor: 'var(--bg-surface)',
+            border: `1px solid ${riskLevel === 'high' ? 'var(--danger-border)' : 'var(--border-tactical)'}`,
+            borderLeft: `4px solid ${riskLevel === 'high' ? 'var(--danger-crimson)' : riskLevel === 'medium' ? 'var(--warning-amber)' : 'var(--success-emerald)'}`,
+            borderRadius: '6px',
+            padding: '12px 14px',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            flexDirection: 'column',
+            gap: '3px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
-              style={{
-                width: '16px',
-                height: '16px',
-                borderRadius: '50%',
-                border: '2px solid #006780',
-                borderTopColor: 'transparent',
-                animation: 'spin 0.8s linear infinite',
-              }}
-            />
-            <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '12px', fontWeight: 600, color: '#006780' }}>
-              REAL-TIME ETHERSCAN SCAN IN PROGRESS:
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              AML Threat Rating
             </span>
-            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '12px', color: '#0b1c30' }}>
-              {loadingStage}
+            <span
+              style={{
+                fontSize: '11.5px',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 800,
+                padding: '2px 7px',
+                borderRadius: '4px',
+                backgroundColor: riskLevel === 'high' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                color: riskLevel === 'high' ? 'var(--danger-crimson)' : 'var(--warning-amber)',
+                border: `1px solid ${riskLevel === 'high' ? 'var(--danger-border)' : 'var(--warning-amber)'}`,
+              }}
+            >
+              SCORE: {riskScore}/100
             </span>
           </div>
-          <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#76777d' }}>
-            Rate-Limit Serialized Queue (260ms)
+          <span
+            style={{
+              fontFamily: 'var(--font-headline)',
+              fontSize: '18px',
+              fontWeight: 800,
+              color: riskLevel === 'high' ? 'var(--danger-crimson)' : riskLevel === 'medium' ? 'var(--warning-amber)' : 'var(--success-emerald)',
+            }}
+          >
+            {riskLevel.toUpperCase()} THREAT
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {data?.riskReason || 'Multi-hop laundering pattern'}
           </span>
         </div>
-      )}
 
-      {/* 2. Top 4-Metric Intelligence Ribbon */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '16px',
-        }}
-      >
-        {/* Card A: Total Tracked Loss */}
+        {/* Metric 2: Terminal Attribution (Target VASP) */}
         <div
           style={{
-            backgroundColor: '#ffffff',
-            border: '1px solid #c6c6cd',
-            borderRadius: '4px',
-            padding: '16px',
+            backgroundColor: 'var(--bg-surface)',
+            border: `1px solid ${isExchange ? 'var(--success-border)' : 'var(--border-tactical)'}`,
+            borderLeft: `4px solid ${isExchange ? 'var(--success-emerald)' : 'var(--text-dim)'}`,
+            borderRadius: '6px',
+            padding: '12px 14px',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+            gap: '3px',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#45464d', letterSpacing: '0.08em' }}>
-                TOTAL TRACKED LOSS
-              </span>
-              <div style={{ fontFamily: 'Space Grotesk', fontSize: '28px', fontWeight: 600, color: '#0b1c30', marginTop: '4px', letterSpacing: '-0.02em' }}>
-                ${totalLossUsd.toLocaleString()}{' '}
-                <span style={{ fontFamily: 'JetBrains Mono', fontSize: '12px', fontWeight: 500, color: '#45464d' }}>
-                  {targetAsset}
-                </span>
-              </div>
-            </div>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '4px',
-                backgroundColor: '#eff4ff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ba1a1a',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>account_balance_wallet</span>
-            </div>
-          </div>
-          <div
-            style={{
-              marginTop: '12px',
-              paddingTop: '6px',
-              borderTop: '1px solid #c6c6cd',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#ba1a1a', fontWeight: 600 }}>
-              {rootAmount} {targetAsset} Siphon
-            </span>
-            <span
-              style={{
-                padding: '2px 6px',
-                backgroundColor: '#ffdad6',
-                color: '#93000a',
-                fontFamily: 'JetBrains Mono',
-                fontSize: '10px',
-                fontWeight: 700,
-                borderRadius: '2px',
-              }}
-            >
-              100% INITIAL TAINT
-            </span>
-          </div>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Target VASP Attribution
+          </span>
+          <span style={{ fontFamily: 'var(--font-headline)', fontSize: '18px', fontWeight: 800, color: isExchange ? 'var(--success-emerald)' : 'var(--text-muted)' }}>
+            {terminalExName}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: isExchange ? 'var(--success-emerald)' : 'var(--text-dim)' }}>
+            {isExchange ? 'Verified Deposit Endpoint' : 'Inconclusive / Hot Wallet'}
+          </span>
         </div>
 
-        {/* Card B: Decayed Root Taint Retained */}
+        {/* Metric 3: Retained Taint Share */}
         <div
           style={{
-            backgroundColor: '#ffffff',
-            border: '1px solid #c6c6cd',
-            borderRadius: '4px',
-            padding: '16px',
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-tactical)',
+            borderLeft: '4px solid var(--accent-cyan)',
+            borderRadius: '6px',
+            padding: '12px 14px',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+            gap: '3px',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#45464d', letterSpacing: '0.08em' }}>
-                DECAYED ROOT TAINT RETAINED
-              </span>
-              <div style={{ fontFamily: 'Space Grotesk', fontSize: '28px', fontWeight: 600, color: '#006780', marginTop: '4px', letterSpacing: '-0.02em' }}>
-                {retainedTaint}
-              </div>
-            </div>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '4px',
-                backgroundColor: '#cceeff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#006780',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>water_drop</span>
-            </div>
-          </div>
-          <div
-            style={{
-              marginTop: '12px',
-              paddingTop: '6px',
-              borderTop: '1px solid #c6c6cd',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#45464d' }}>
-              Certainty Index: <strong style={{ color: '#0b1c30' }}>99.2%</strong>
-            </span>
-            <span
-              style={{
-                padding: '2px 6px',
-                backgroundColor: '#eff4ff',
-                color: '#006780',
-                fontFamily: 'JetBrains Mono',
-                fontSize: '10px',
-                fontWeight: 700,
-                borderRadius: '2px',
-                border: '1px solid #c6c6cd',
-              }}
-            >
-              FIFO PROOF VALID
-            </span>
-          </div>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Retained Taint Share
+          </span>
+          <span style={{ fontFamily: 'var(--font-headline)', fontSize: '18px', fontWeight: 800, color: 'var(--accent-cyan)' }}>
+            {retainedTaint} Residual Taint
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
+            {rawHops.length} Traced Hop(s) Discovered
+          </span>
         </div>
 
-        {/* Card C: Terminal VASP Exit Node */}
+        {/* Metric 4: Tracked Valuation / Money USD */}
         <div
           style={{
-            backgroundColor: '#ffffff',
-            border: '1px solid #c6c6cd',
-            borderRadius: '4px',
-            padding: '16px',
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-tactical)',
+            borderLeft: '4px solid var(--border-tactical)',
+            borderRadius: '6px',
+            padding: '12px 14px',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+            gap: '3px',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#45464d', letterSpacing: '0.08em' }}>
-                TERMINAL VASP EXIT NODE
-              </span>
-              <div style={{ fontFamily: 'Space Grotesk', fontSize: '16px', fontWeight: 600, color: '#0b1c30', marginTop: '4px' }}>
-                {terminalExName}
-              </div>
-              <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#45464d' }}>
-                UID: ***{data?.id ? data.id.substring(0, 4) : '8492'}
-              </span>
-            </div>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '4px',
-                backgroundColor: isExchange ? '#dce9ff' : '#eff4ff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#000000',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>assured_workload</span>
-            </div>
-          </div>
-          <div
-            style={{
-              marginTop: '12px',
-              paddingTop: '6px',
-              borderTop: '1px solid #c6c6cd',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#0b1c30', fontWeight: 600 }}>
-              {trappedUsd}
-            </span>
-            <span
-              style={{
-                padding: '2px 6px',
-                backgroundColor: isExchange ? '#ba1a1a' : '#76777d',
-                color: '#ffffff',
-                fontFamily: 'JetBrains Mono',
-                fontSize: '10px',
-                fontWeight: 700,
-                borderRadius: '2px',
-              }}
-            >
-              {isExchange ? 'FREEZE CANDIDATE' : 'INCONCLUSIVE'}
-            </span>
-          </div>
-        </div>
-
-        {/* Card D: AML Threat Scoring */}
-        <div
-          style={{
-            backgroundColor: '#ffffff',
-            border: '1px solid #c6c6cd',
-            borderRadius: '4px',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#45464d', letterSpacing: '0.08em' }}>
-                AML THREAT SCORING
-              </span>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginTop: '4px' }}>
-                <span style={{ fontFamily: 'Space Grotesk', fontSize: '28px', fontWeight: 600, color: '#ba1a1a', letterSpacing: '-0.02em' }}>
-                  {riskScore}
-                </span>
-                <span style={{ fontFamily: 'Space Grotesk', fontSize: '16px', fontWeight: 600, color: '#76777d' }}>
-                  / 100
-                </span>
-              </div>
-            </div>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '4px',
-                backgroundColor: '#ffdad6',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ba1a1a',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>warning</span>
-            </div>
-          </div>
-          <div
-            style={{
-              marginTop: '12px',
-              paddingTop: '6px',
-              borderTop: '1px solid #c6c6cd',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#ba1a1a', fontWeight: 600 }}>
-              {riskSev}
-            </span>
-            <span
-              style={{
-                padding: '2px 6px',
-                backgroundColor: '#ffdad6',
-                color: '#93000a',
-                fontFamily: 'JetBrains Mono',
-                fontSize: '10px',
-                fontWeight: 700,
-                borderRadius: '2px',
-              }}
-            >
-              INTERVENTION REQ
-            </span>
-          </div>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Tracked Valuation (USD)
+          </span>
+          <span style={{ fontFamily: 'var(--font-headline)', fontSize: '18px', fontWeight: 800, color: 'var(--text-main)' }}>
+            ${trappedValuationUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)' }}>
+            Oracle: ${ethRate.toLocaleString()} / ETH
+          </span>
         </div>
       </div>
 
-      {/* 3. Split Command Center Workspace (12-Column Grid) */}
+      {/* 3. SIDE-BY-SIDE: Visualizer Canvas (Left ~68%) + Node Role Matrix Card (Right ~32%) */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '7.5fr 4.5fr',
-          gap: '16px',
-          alignItems: 'start',
+          gridTemplateColumns: 'minmax(0, 1fr) 340px',
+          gap: '14px',
+          alignItems: 'stretch',
         }}
       >
-        {/* LEFT PANEL: Multi-Hop Fund Flow Visualizer & Graph Canvas */}
+        {/* Left Side: Graph Visualizer Canvas Card */}
         <div
           style={{
-            backgroundColor: '#ffffff',
-            border: '1px solid #c6c6cd',
-            borderRadius: '4px',
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-tactical)',
+            borderRadius: '6px',
+            overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}
+        >
+          <ForensicTreeGraph
+            tree={data?.tree}
+            graph={data?.graph}
+            hops={rawHops}
+            rootAddress={suspectWallet}
+            terminalExchange={data?.terminalExchange}
+            terminalType={data?.terminalType}
+            targetAsset={targetAsset}
+            selectedBranchId={selectedBranchId}
+            selectedNodeId={selectedNodeId}
+            onSelectNode={(node) => setSelectedNodeId(node ? node.id : null)}
+            layoutMode={layoutMode}
+            onLayoutModeChange={(m) => setLayoutMode(m)}
+            height="460px"
+          />
+        </div>
+
+        {/* Right Side: Persistent Forensic Role Identification Matrix */}
+        <div
+          style={{
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-tactical)',
+            borderRadius: '6px',
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            height: '460px',
+            boxSizing: 'border-box',
             overflow: 'hidden',
           }}
         >
-          {/* Interactive Graph Toolbar */}
-          <div
-            style={{
-              padding: '8px 12px',
-              backgroundColor: '#eff4ff',
-              borderBottom: '1px solid #c6c6cd',
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '8px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  backgroundColor: '#ffffff',
-                  padding: '4px 8px',
-                  borderRadius: '2px',
-                  border: '1px solid #c6c6cd',
-                }}
-              >
-                <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#45464d' }}>
-                  HOP DEPTH:
-                </span>
-                <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', fontWeight: 700, color: '#006780' }}>
-                  HOP 0 → HOP {hopsList.length > 0 ? hopsList.length - 1 : 1}
-                </span>
-              </div>
-
-              <div
-                onClick={() => setTaintFilterActive(!taintFilterActive)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  backgroundColor: '#ffffff',
-                  padding: '4px 8px',
-                  borderRadius: '2px',
-                  border: '1px solid #c6c6cd',
-                  cursor: 'pointer',
-                }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#006780' }}>filter_alt</span>
-                <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#0b1c30' }}>
-                  TAINT &gt; 50%
-                </span>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: taintFilterActive ? '#006780' : '#c6c6cd' }} />
-              </div>
-
-              <button
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  backgroundColor: '#ffffff',
-                  padding: '4px 8px',
-                  borderRadius: '2px',
-                  border: '1px solid #c6c6cd',
-                  color: '#0b1c30',
-                  fontFamily: 'JetBrains Mono',
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>device_hub</span>
-                <span>AUTO HEURISTIC</span>
-              </button>
-
-              {/* View Mode Switcher: Tree Graph vs Linear Dossier */}
-              <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#ffffff', borderRadius: '3px', border: '1px solid #c6c6cd', overflow: 'hidden' }}>
-                <button
-                  onClick={() => setViewMode('tree')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '5px 10px',
-                    backgroundColor: viewMode === 'tree' ? '#006780' : 'transparent',
-                    color: viewMode === 'tree' ? '#ffffff' : '#0b1c30',
-                    border: 'none',
-                    fontFamily: 'JetBrains Mono',
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>account_tree</span>
-                  <span>TREE GRAPH (CIRCULAR)</span>
-                </button>
-                <button
-                  onClick={() => setViewMode('linear')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '5px 10px',
-                    backgroundColor: viewMode === 'linear' ? '#006780' : 'transparent',
-                    color: viewMode === 'linear' ? '#ffffff' : '#0b1c30',
-                    border: 'none',
-                    borderLeft: '1px solid #c6c6cd',
-                    fontFamily: 'JetBrains Mono',
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>view_stream</span>
-                  <span>STEP DOSSIER</span>
-                </button>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                onClick={handleExportPdf}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '6px 12px',
-                  backgroundColor: '#000000',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '2px',
-                  fontFamily: 'JetBrains Mono',
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>download</span>
-                <span>EXPORT EVIDENCE (PDF)</span>
-              </button>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-tactical)', paddingBottom: '7px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--accent-cyan)' }}>
+              category
+            </span>
+            <div>
+              <h4 style={{ fontFamily: 'var(--font-headline)', fontSize: '12.5px', fontWeight: 800, color: 'var(--text-main)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Node Role Matrix
+              </h4>
+              <p style={{ fontSize: '10.5px', color: 'var(--text-dim)', margin: 0 }}>
+                Forensic classification keys
+              </p>
             </div>
           </div>
 
-          {/* Graph Viewport */}
-          <div
-            style={{
-              position: 'relative',
-              backgroundColor: '#eff4ff',
-              backgroundImage: 'radial-gradient(#006780 0.75px, transparent 0.75px)',
-              backgroundSize: '24px 24px',
-              minHeight: '560px',
-              padding: '14px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-            }}
-          >
-            {/* Live Status Bar */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                backdropFilter: 'blur(4px)',
-                padding: '6px 12px',
-                borderRadius: '2px',
-                border: '1px solid #c6c6cd',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                zIndex: 10,
-                marginBottom: '10px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#006780' }}>radar</span>
-                <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#0b1c30', fontWeight: 600 }}>
-                  TRACE STREAM: {hopsList.length} Live On-Chain Hops Ingested
-                </span>
-              </div>
-              <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#047857' }}>
-                ETHERSCAN V2 + SUPABASE DB: SYNCED
-              </span>
-            </div>
-
-            {/* Circular Node Tree Graph View OR Linear Step Cards */}
-            {viewMode === 'tree' ? (
-              <div style={{ width: '100%', margin: '6px 0', zIndex: 10 }}>
-                <ForensicTreeGraph
-                  tree={data?.tree}
-                  graph={data?.graph}
-                  hops={rawHops}
-                  rootAddress={data?.walletAddress || data?.tree?.rootAddress || targetInput || DEFAULT_TARGET_WALLET}
-                  terminalExchange={data?.terminalExchange}
-                  terminalType={data?.terminalType}
-                  ethPriceUsd={ethRate}
-                  targetAsset={targetAsset}
-                  onSelectAddress={(addr) => setTargetInput(addr)}
-                />
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '20px auto', width: '100%', maxWidth: '580px', zIndex: 10 }}>
-              {hopsList.length > 0 ? (
-                hopsList.map((hop, idx) => {
-                  const isFirst = idx === 0;
-                  const isLast = idx === hopsList.length - 1;
-
-                  return (
-                    <React.Fragment key={`${hop.address}-${idx}`}>
-                      {/* Hop Node Card */}
-                      <div
-                        style={{
-                          width: '100%',
-                          backgroundColor: isLast ? '#dce9ff' : '#ffffff',
-                          border: isFirst
-                            ? '2px solid #000000'
-                            : isLast
-                            ? '2px solid #006780'
-                            : idx === 1
-                            ? '1px solid #ba1a1a'
-                            : '1px solid #76777d',
-                          borderRadius: '4px',
-                          padding: '12px 16px',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            borderBottom: '1px solid #c6c6cd',
-                            paddingBottom: '8px',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span
-                              style={{
-                                padding: '2px 6px',
-                                backgroundColor: hop.stageBadgeBg,
-                                color: hop.stageBadgeText,
-                                fontFamily: 'JetBrains Mono',
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                borderRadius: '2px',
-                              }}
-                            >
-                              {hop.stageName}
-                            </span>
-                            <span style={{ fontFamily: 'Space Grotesk', fontSize: '16px', fontWeight: 600, color: '#0b1c30' }}>
-                              {hop.title}
-                            </span>
-                          </div>
-                          {isLast && isExchange ? (
-                            <span
-                              style={{
-                                padding: '2px 6px',
-                                backgroundColor: '#ba1a1a',
-                                color: '#ffffff',
-                                fontFamily: 'JetBrains Mono',
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                borderRadius: '2px',
-                              }}
-                            >
-                              ACTIONABLE FREEZE
-                            </span>
-                          ) : (
-                            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', fontWeight: 700, color: hop.taintColor }}>
-                              {hop.taintText}
-                            </span>
-                          )}
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '8px' }}>
-                          <div>
-                            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#45464d', display: 'block' }}>
-                              {isLast ? 'TARGET ADDRESS' : 'ADDRESS'}
-                            </span>
-                            <a
-                              href={`https://etherscan.io/address/${hop.fullAddress}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{
-                                fontFamily: 'JetBrains Mono',
-                                fontSize: '11px',
-                                color: '#006780',
-                                fontWeight: 600,
-                                textDecoration: 'none',
-                              }}
-                            >
-                              {hop.address} ↗
-                            </a>
-                          </div>
-                          <div>
-                            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#45464d', display: 'block' }}>
-                              {hop.volLabel}
-                            </span>
-                            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: hop.volColor || '#0b1c30', fontWeight: 700 }}>
-                              {hop.volValue}
-                            </span>
-                          </div>
-                          <div>
-                            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#45464d', display: 'block' }}>
-                              {hop.metaLabel}
-                            </span>
-                            <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: hop.metaColor || '#0b1c30', fontWeight: isLast ? 700 : 500 }}>
-                              {hop.metaValue}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Vector Connector */}
-                      {hop.connectorText && (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '-4px 0' }}>
-                          <div style={{ width: '2px', height: '24px', backgroundColor: hop.connectorType === 'deposit' ? '#006780' : '#ba1a1a' }} />
-                          <div
-                            style={{
-                              padding: '4px 12px',
-                              backgroundColor: hop.connectorType === 'deposit' ? '#cceeff' : '#ffffff',
-                              border: hop.connectorType === 'deposit' ? '1px solid #006780' : hop.connectorType === 'router' ? '1px solid #c6c6cd' : '1px solid #ba1a1a',
-                              borderRadius: '2px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                            }}
-                          >
-                            {hop.connectorType === 'peel' && (
-                              <span className="material-symbols-outlined" style={{ fontSize: '14px', color: '#ba1a1a' }}>fork_right</span>
-                            )}
-                            {hop.connectorType === 'router' && (
-                              <span className="material-symbols-outlined" style={{ fontSize: '14px', color: '#006780' }}>security</span>
-                            )}
-                            {hop.connectorType === 'deposit' && (
-                              <span className="material-symbols-outlined" style={{ fontSize: '14px', color: '#006780' }}>move_to_inbox</span>
-                            )}
-                            <span
-                              style={{
-                                fontFamily: 'JetBrains Mono',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                color: hop.connectorType === 'deposit' ? '#006780' : hop.connectorType === 'router' ? '#0b1c30' : '#ba1a1a',
-                              }}
-                            >
-                              {hop.connectorText}
-                            </span>
-                          </div>
-                          <div style={{ width: '2px', height: '24px', backgroundColor: hop.connectorType === 'deposit' ? '#006780' : '#ba1a1a' }} />
-                          <span
-                            className="material-symbols-outlined"
-                            style={{
-                              fontSize: '18px',
-                              color: hop.connectorType === 'deposit' ? '#006780' : '#ba1a1a',
-                              marginTop: '-6px',
-                            }}
-                          >
-                            arrow_drop_down
-                          </span>
-                        </div>
-                      )}
-                    </React.Fragment>
-                  );
-                })
-              ) : (
-                <div style={{ padding: '3rem 1rem', textAlign: 'center', color: '#45464d', fontFamily: 'JetBrains Mono', fontSize: '12px' }}>
-                  No multi-hop transfers detected for this address yet.
-                </div>
-              )}
-            </div>
-            )}
-
-            {/* Forensic Graph Legend */}
-            <div
-              style={{
-                borderTop: '1px solid #c6c6cd',
-                paddingTop: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                backgroundColor: 'rgba(255, 255, 255, 0.85)',
-                padding: '8px 12px',
-                borderRadius: '2px',
-                gap: '8px',
-                zIndex: 10,
-              }}
-            >
-              <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d', textTransform: 'uppercase' }}>
-                GRAPH HEURISTICS LEGEND:
-              </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: '#000000' }} />
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#0b1c30' }}>Victim Cold Wallet</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: '#ba1a1a' }} />
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#0b1c30' }}>Rapid Peel Chain</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: '#76777d' }} />
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#0b1c30' }}>Mixer / Relay Proxy</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: '#006780' }} />
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#0b1c30' }}>Actionable VASP Exit</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT PANEL: Tactical Attribution & Action Dossier */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Target VASP Profile Card */}
-          <div
-            style={{
-              backgroundColor: '#ffffff',
-              border: '1px solid #c6c6cd',
-              borderRadius: '4px',
-              overflow: 'hidden',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            }}
-          >
-            <div
-              style={{
-                padding: '8px 12px',
-                backgroundColor: '#eff4ff',
-                borderBottom: '1px solid #c6c6cd',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#006780' }}>verified</span>
-                <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#0b1c30', textTransform: 'uppercase' }}>
-                  VASP COMPLIANCE DOSSIER
-                </span>
-              </div>
-              <span
-                style={{
-                  padding: '2px 6px',
-                  backgroundColor: '#cceeff',
-                  color: '#006780',
-                  fontFamily: 'JetBrains Mono',
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  borderRadius: '2px',
-                }}
-              >
-                FAST-TRACK DESK
-              </span>
-            </div>
-
-            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <span style={{ fontFamily: 'Space Grotesk', fontSize: '16px', fontWeight: 600, color: '#0b1c30', display: 'block' }}>
-                  {data?.terminalExchange ? `${data.terminalExchange} Global Compliance Desk` : isExchange ? 'Verified VASP Custody Desk' : 'Uncataloged Hot Wallet Node'}
-                </span>
-                <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#45464d' }}>
-                  {data?.terminalExchange ? 'Real-Time VASP Catalog Match • Section 91 CrPC Fast-Track' : 'Decentralized EVM Address Node • Autonomous On-Chain Traversal'}
-                </span>
-              </div>
-
-              {/* 4-Item Telemetry Grid */}
+          {/* 5 Distinct Cards filling space with consistent 7px gaps and legible typography */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', flex: 1, minHeight: 0 }}>
+            {ROLE_DEFINITIONS.map((def) => (
               <div
+                key={def.code}
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '8px',
-                  backgroundColor: '#eff4ff',
-                  padding: '10px',
+                  flex: 1,
+                  padding: '6px 10px',
+                  backgroundColor: 'var(--bg-surface-low)',
+                  border: '1px solid var(--border-tactical)',
+                  borderLeft: `3.5px solid ${def.color}`,
                   borderRadius: '4px',
-                  border: '1px solid #c6c6cd',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  gap: '3px',
                 }}
               >
-                <div>
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d', display: 'block' }}>
-                    DESK IDENTIFIER
-                  </span>
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', fontWeight: 600, color: '#0b1c30' }}>
-                    {data?.terminalExchange ? `${data.terminalExchange.toUpperCase().replace(/[^A-Z0-9]/g, '')}-AML-692` : (data?.id ? `EVM-${data.id.substring(0, 6).toUpperCase()}` : 'INTER-UNVERIFIED')}
-                  </span>
-                </div>
-                <div>
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d', display: 'block' }}>
-                    JURISDICTION
-                  </span>
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', fontWeight: 600, color: '#0b1c30' }}>
-                    {data?.terminalExchange ? 'FATF / Global VASP Desk' : 'Transnational EVM'}
-                  </span>
-                </div>
-                <div>
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d', display: 'block' }}>
-                    SLA GUARANTEE
-                  </span>
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', fontWeight: 700, color: isExchange ? '#ba1a1a' : '#76777d' }}>
-                    {isExchange ? '< 120 Mins (Freeze Directive)' : 'Section 91 CrPC Notice'}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: def.color, display: 'inline-block', flexShrink: 0 }} />
+                    <span style={{ fontFamily: 'var(--font-headline)', fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>
+                      {def.role}
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      padding: '1.5px 6px',
+                      backgroundColor: 'var(--bg-surface)',
+                      color: def.color,
+                      border: '1px solid var(--border-tactical)',
+                      borderRadius: '3px',
+                      fontSize: '10px',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {def.code}
                   </span>
                 </div>
-                <div>
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d', display: 'block' }}>
-                    API HANDSHAKE
-                  </span>
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', fontWeight: 700, color: '#006780' }}>
-                    {data?.terminalExchange ? 'Etherscan V2 + PostgreSQL Catalog' : 'Etherscan Node RPC'}
-                  </span>
-                </div>
-              </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button
-                  onClick={() => setSubpoenaOpen(true)}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    padding: '12px 16px',
-                    backgroundColor: '#ba1a1a',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '4px',
-                    fontFamily: 'Space Grotesk',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(186, 26, 26, 0.2)',
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>gavel</span>
-                  <span>ISSUE EMERGENCY FREEZE SUBPOENA</span>
-                </button>
-                <p style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d', textAlign: 'center', margin: 0 }}>
-                  Dispatches MLAT Packet & Court Freeze Directive directly to Compliance Desk
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.3' }}>
+                  {def.meaning}
                 </p>
 
-                <button
-                  onClick={handleExportPdf}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    padding: '12px 16px',
-                    backgroundColor: '#000000',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '4px',
-                    fontFamily: 'Space Grotesk',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>verified_user</span>
-                  <span>GENERATE SEC 65B EVIDENCE CERTIFICATE</span>
-                </button>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '6px 8px',
-                    backgroundColor: '#eff4ff',
-                    borderRadius: '2px',
-                    border: '1px solid #c6c6cd',
-                    fontFamily: 'JetBrains Mono',
-                    fontSize: '11px',
-                  }}
-                >
-                  <span style={{ color: '#45464d' }}>
-                    DIGITAL SIGNATURE: <strong style={{ color: '#0b1c30' }}>VALID</strong>
-                  </span>
-                  <span style={{ color: '#76777d' }}>SHA-256: 3c9b...a19f</span>
+                <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '13px', color: 'var(--accent-cyan)' }}>chevron_right</span>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{def.action}</span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Cryptographic Proof of Flow Ledger */}
-          <div
-            style={{
-              backgroundColor: '#ffffff',
-              border: '1px solid #c6c6cd',
-              borderRadius: '4px',
-              overflow: 'hidden',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            <div
-              style={{
-                padding: '8px 12px',
-                backgroundColor: '#eff4ff',
-                borderBottom: '1px solid #c6c6cd',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#000000' }}>receipt_long</span>
-                <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#0b1c30', textTransform: 'uppercase' }}>
-                  FORENSIC EVIDENTIARY LEDGER
-                </span>
-              </div>
-              <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', fontWeight: 700, color: '#006780' }}>
-                {hopsList.length} CHAIN TXS
-              </span>
-            </div>
-
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#e5eeff', borderBottom: '1px solid #c6c6cd' }}>
-                  <th style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d' }}>
-                    TX HASH
-                  </th>
-                  <th style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d' }}>
-                    TIME
-                  </th>
-                  <th style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d', textAlign: 'right' }}>
-                    VOLUME
-                  </th>
-                  <th style={{ padding: '6px 10px', fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d' }}>
-                    STAGE
-                  </th>
-                </tr>
-              </thead>
-              <tbody style={{ fontFamily: 'JetBrains Mono', fontSize: '11px' }}>
-                {hopsList.map((h, idx) => {
-                  const isLast = idx === hopsList.length - 1;
-                  return (
-                    <tr
-                      key={h.fullTxHash + idx}
-                      style={{
-                        borderBottom: '1px solid #c6c6cd',
-                        backgroundColor: isLast ? 'rgba(220, 233, 255, 0.4)' : '#ffffff',
-                      }}
-                    >
-                      <td style={{ padding: '8px 10px', fontWeight: 600 }}>
-                        <a
-                          href={`https://etherscan.io/tx/${h.fullTxHash}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ color: '#006780', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <span>{h.txHash}</span>
-                          <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>open_in_new</span>
-                        </a>
-                      </td>
-                      <td style={{ padding: '8px 10px', color: '#45464d' }}>{h.time}</td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, color: idx === 0 ? '#ba1a1a' : isLast ? '#006780' : '#0b1c30' }}>
-                        {h.volValue}
-                      </td>
-                      <td style={{ padding: '8px 10px' }}>
-                        <span
-                          style={{
-                            padding: '2px 6px',
-                            borderRadius: '2px',
-                            fontFamily: 'JetBrains Mono',
-                            fontSize: '10px',
-                            fontWeight: 700,
-                            backgroundColor: idx === 0 ? '#ffdad6' : isLast ? '#006780' : '#eff4ff',
-                            color: idx === 0 ? '#93000a' : isLast ? '#ffffff' : '#0b1c30',
-                          }}
-                        >
-                          {h.stageLabel}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            {/* Merkle Seal Footer */}
-            <div
-              style={{
-                padding: '8px 12px',
-                backgroundColor: '#e5eeff',
-                borderTop: '1px solid #c6c6cd',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '16px', color: '#006780' }}>lock_clock</span>
-                <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#0b1c30', textTransform: 'uppercase' }}>
-                  CONFIRMATION DEPTH: 142 BLOCKS
-                </span>
-              </div>
-              <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#76777d' }}>
-                MERKLE ROOT VERIFIED
-              </span>
-            </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Emergency Subpoena Modal */}
+      {/* 4. Tabbed Forensic Investigation Workbench */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--border-tactical)',
+          borderRadius: '6px',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Navigation Tabs Bar */}
+        <div
+          style={{
+            padding: '8px 16px',
+            backgroundColor: 'var(--bg-surface-low)',
+            borderBottom: '1px solid var(--border-tactical)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            {data?.tree && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('branches')}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: activeTab === 'branches' ? 'var(--accent-cyan)' : 'transparent',
+                  color: activeTab === 'branches' ? '#ffffff' : 'var(--text-main)',
+                  border: `1px solid ${activeTab === 'branches' ? 'var(--accent-cyan)' : 'var(--border-tactical)'}`,
+                  borderRadius: '4px',
+                  fontFamily: 'var(--font-headline)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>fork_right</span>
+                <span>Branch Topology ({data.tree.totalBranches || 0})</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('ledger')}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: activeTab === 'ledger' ? 'var(--accent-cyan)' : 'transparent',
+                color: activeTab === 'ledger' ? '#ffffff' : 'var(--text-main)',
+                border: `1px solid ${activeTab === 'ledger' ? 'var(--accent-cyan)' : 'var(--border-tactical)'}`,
+                borderRadius: '4px',
+                fontFamily: 'var(--font-headline)',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>table_chart</span>
+              <span>Hop Ledger ({rawHops.length})</span>
+            </button>
+
+            {isExchange && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('playbook')}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: activeTab === 'playbook' ? 'var(--accent-cyan)' : 'transparent',
+                  color: activeTab === 'playbook' ? '#ffffff' : 'var(--text-main)',
+                  border: `1px solid ${activeTab === 'playbook' ? 'var(--accent-cyan)' : 'var(--border-tactical)'}`,
+                  borderRadius: '4px',
+                  fontFamily: 'var(--font-headline)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>local_police</span>
+                <span>LEA Action Playbook</span>
+              </button>
+            )}
+          </div>
+
+          {/* Unified View Option */}
+          <button
+            type="button"
+            onClick={() => setActiveTab(activeTab === 'all' ? 'branches' : 'all')}
+            style={{
+              padding: '5px 10px',
+              backgroundColor: activeTab === 'all' ? 'var(--bg-surface-high)' : 'transparent',
+              color: activeTab === 'all' ? 'var(--accent-cyan)' : 'var(--text-dim)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '4px',
+              fontFamily: 'var(--font-headline)',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+              {activeTab === 'all' ? 'view_agenda' : 'view_stream'}
+            </span>
+            <span>{activeTab === 'all' ? 'Tabs Mode' : 'Show All Modules'}</span>
+          </button>
+        </div>
+
+        {/* Tab Content Areas */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px' }}>
+          {/* TAB 1: Branch Topology Card */}
+          {data?.tree && (activeTab === 'branches' || activeTab === 'all') && (
+            <BranchSummaryCard
+              tree={data.tree}
+              selectedBranchId={selectedBranchId}
+              onSelectBranch={(branch) => {
+                setSelectedBranchId(branch ? branch.branchId : null);
+                setSelectedNodeId(null);
+              }}
+            />
+          )}
+
+          {/* TAB 2: Hop Ledger Table */}
+          {(activeTab === 'ledger' || activeTab === 'all') && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--accent-cyan)' }}>table_chart</span>
+                  <h4 style={{ fontFamily: 'var(--font-headline)', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
+                    Sequential Chain of Custody & Hop Ledger
+                  </h4>
+                </div>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)' }}>
+                  Click address to inspect node on canvas
+                </span>
+              </div>
+
+              <div style={{ overflowX: 'auto', border: '1px solid var(--border-tactical)', borderRadius: '4px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--bg-surface-low)', borderBottom: '1px solid var(--border-tactical)' }}>
+                      <th style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', fontWeight: 700 }}>HOP</th>
+                      <th style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', fontWeight: 700 }}>FROM ADDRESS</th>
+                      <th style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', fontWeight: 700 }}>TO ADDRESS</th>
+                      <th style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', fontWeight: 700 }}>TRANSACTED AMOUNT</th>
+                      <th style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', fontWeight: 700 }}>USD VALUE</th>
+                      <th style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', fontWeight: 700 }}>RETAINED TAINT</th>
+                      <th style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', fontWeight: 700 }}>TX HASH</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rawHops.length > 0 ? (
+                      rawHops.map((hop: any, idx: number) => {
+                        const hopNum = hop.hopIndex || idx + 1;
+                        const sym = hop.tokenSymbol || targetAsset;
+                        const amt = hop.tokenAmount !== undefined ? hop.tokenAmount : hop.amountEth || 0;
+                        const usd = hop.usdValue || (amt * (sym === 'ETH' ? ethRate : 1));
+                        const isLast = idx === rawHops.length - 1;
+                        const isRowSelected = selectedNodeId === hop.toAddress || selectedNodeId === hop.fromAddress;
+
+                        const fromAddr = (hop.fromAddress || '').toLowerCase();
+                        const toAddr = (hop.toAddress || '').toLowerCase();
+                        const txHashKey = (hop.txHash || '').toLowerCase();
+
+                        // Exact per-hop taint resolution from edge graph
+                        let hopTaintVal: number | undefined = hop.taintPercentage;
+                        if (hopTaintVal === undefined) {
+                          hopTaintVal = edgeTaintMap.get(`${fromAddr}_${toAddr}`);
+                        }
+                        if (hopTaintVal === undefined && txHashKey) {
+                          hopTaintVal = edgeTaintMap.get(txHashKey);
+                        }
+                        if (hopTaintVal === undefined) {
+                          if (data?.victimAmountUsd && usd > 0) {
+                            hopTaintVal = Math.min(100, Math.round((usd / data.victimAmountUsd) * 1000) / 10);
+                          } else if (totalLossUsd > 0 && usd > 0) {
+                            hopTaintVal = Math.min(100, Math.round((usd / totalLossUsd) * 1000) / 10);
+                          } else {
+                            hopTaintVal = Math.max(5, Math.round((100 - idx * 12.5) * 10) / 10);
+                          }
+                        }
+
+                        return (
+                          <tr
+                            key={`${hop.txHash}_${idx}`}
+                            style={{
+                              borderBottom: '1px solid var(--border-subtle)',
+                              backgroundColor: isRowSelected
+                                ? (isLight ? 'rgba(2, 132, 199, 0.12)' : 'rgba(2, 132, 199, 0.25)')
+                                : 'var(--bg-surface)',
+                              transition: 'background-color 0.15s ease',
+                            }}
+                          >
+                            <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 700 }}>
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  padding: '2px 6px',
+                                  backgroundColor: isLast && isExchange ? 'var(--success-container)' : 'var(--bg-surface-high)',
+                                  color: isLast && isExchange ? 'var(--success-emerald)' : 'var(--text-main)',
+                                  borderRadius: '3px',
+                                  border: `1px solid ${isLast && isExchange ? 'var(--success-border)' : 'var(--border-tactical)'}`,
+                                }}
+                              >
+                                HOP {hopNum}
+                              </span>
+                            </td>
+
+                            <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '11.5px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedNodeId(hop.fromAddress)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 0,
+                                    color: 'var(--text-main)',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '11.5px',
+                                    cursor: 'pointer',
+                                    textDecoration: 'underline',
+                                  }}
+                                  title="Inspect node on canvas"
+                                >
+                                  {hop.fromAddress ? `${hop.fromAddress.substring(0, 8)}...${hop.fromAddress.substring(hop.fromAddress.length - 6)}` : 'N/A'}
+                                </button>
+                                <a
+                                  href={`https://etherscan.io/address/${hop.fromAddress}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ color: 'var(--text-dim)', display: 'flex', alignItems: 'center' }}
+                                  title="View on Etherscan"
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>open_in_new</span>
+                                </a>
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '11.5px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedNodeId(hop.toAddress)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 0,
+                                    color: isLast && isExchange ? 'var(--success-emerald)' : 'var(--text-main)',
+                                    fontWeight: isLast && isExchange ? 700 : 500,
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '11.5px',
+                                    cursor: 'pointer',
+                                    textDecoration: 'underline',
+                                  }}
+                                  title="Inspect node on canvas"
+                                >
+                                  {hop.toAddress ? `${hop.toAddress.substring(0, 8)}...${hop.toAddress.substring(hop.toAddress.length - 6)}` : 'N/A'}
+                                </button>
+                                {isLast && data?.terminalExchange && (
+                                  <span
+                                    style={{
+                                      padding: '1px 4px',
+                                      backgroundColor: 'var(--success-container)',
+                                      color: 'var(--success-emerald)',
+                                      borderRadius: '2px',
+                                      fontSize: '9.5px',
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {data.terminalExchange}
+                                  </span>
+                                )}
+                                <a
+                                  href={`https://etherscan.io/address/${hop.toAddress}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ color: 'var(--text-dim)', display: 'flex', alignItems: 'center' }}
+                                  title="View on Etherscan"
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>open_in_new</span>
+                                </a>
+                              </div>
+                            </td>
+
+                            <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-main)' }}>
+                              {amt.toLocaleString(undefined, { maximumFractionDigits: 4 })} {sym}
+                            </td>
+
+                            <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                              ${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+
+                            <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '11.5px', fontWeight: 700, color: isLast && isExchange ? 'var(--success-emerald)' : 'var(--text-main)' }}>
+                              {hopTaintVal !== undefined ? `${hopTaintVal.toFixed(1)}%` : '100.0%'}
+                            </td>
+
+                            <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '11.5px' }}>
+                              <a
+                                href={`https://etherscan.io/tx/${hop.txHash}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ color: 'var(--accent-cyan)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                <span>{hop.txHash ? `${hop.txHash.substring(0, 8)}...` : 'N/A'}</span>
+                                <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>open_in_new</span>
+                              </a>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
+                          No multi-hop transactions recorded for this case.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: LEA Action Playbook */}
+          {isExchange && (activeTab === 'playbook' || activeTab === 'all') && (
+            <InvestigatorActionCard
+              exchangeName={data?.terminalExchange || 'Binance'}
+              walletAddress={suspectWallet}
+              victimTxHash={data?.victimTxHash || finalHop?.txHash}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Subpoena Legal Preservation Notice Modal */}
       <SubpoenaModal
         isOpen={subpoenaOpen}
         onClose={() => setSubpoenaOpen(false)}
-        exchangeName={terminalExName}
-        walletAddress={data?.walletAddress || targetInput || DEFAULT_TARGET_WALLET}
-        terminalAddress={hopsList[hopsList.length - 1]?.fullAddress || data?.terminalAddress || '0x0000000000000000000000000000000000000000'}
-        victimTxHash={data?.victimTxHash}
-        trackedLossUsd={totalLossUsd}
+        exchangeName={data?.terminalExchange || 'Binance'}
+        walletAddress={suspectWallet}
+        terminalAddress={finalHop?.toAddress || suspectWallet}
+        victimTxHash={data?.victimTxHash || finalHop?.txHash}
+        trackedLossUsd={trappedValuationUsd}
       />
     </div>
   );

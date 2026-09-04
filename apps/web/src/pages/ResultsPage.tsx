@@ -163,7 +163,6 @@ export const ResultsPage: React.FC = () => {
                 height: '6px',
                 borderRadius: '50%',
                 backgroundColor: 'var(--danger-crimson)',
-                boxShadow: '0 0 6px var(--danger-crimson)',
               }}
             />
             <span className="font-mono-data-xs" style={{ color: 'var(--danger-crimson)', fontWeight: 600 }}>
@@ -186,7 +185,7 @@ export const ResultsPage: React.FC = () => {
           </button>
           <button
             onClick={() => exportInvestigationPdf(data)}
-            className="btn-tactical btn-tactical-primary"
+            className="btn-tactical btn-tactical-dark"
             style={{ fontSize: '0.72rem', padding: '0.35rem 0.75rem' }}
           >
             <Download size={12} />
@@ -570,38 +569,37 @@ export const ResultsPage: React.FC = () => {
             <div
               style={{
                 marginTop: '1rem',
-                paddingTop: '0.65rem',
                 borderTop: '1px solid var(--border-tactical)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
                 gap: '0.75rem',
-                backgroundColor: 'rgba(8, 11, 16, 0.7)',
-                backdropFilter: 'blur(4px)',
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-tactical)',
                 padding: '0.5rem 0.75rem',
-                borderRadius: '3px',
+                borderRadius: '4px',
               }}
             >
-              <span className="font-label-caps" style={{ color: 'var(--text-dim)' }}>
+              <span className="font-label-caps" style={{ color: 'var(--text-muted)' }}>
                 HEURISTICS LEGEND:
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'var(--accent-cyan)' }} />
-                  <span className="font-mono-data-xs" style={{ color: 'var(--text-main)' }}>Victim Origin</span>
+                  <span className="font-mono-data-xs" style={{ color: 'var(--text-main)', fontWeight: 600 }}>Victim Origin</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'var(--danger-crimson)' }} />
-                  <span className="font-mono-data-xs" style={{ color: 'var(--text-main)' }}>Rapid Peel Node</span>
+                  <span className="font-mono-data-xs" style={{ color: 'var(--text-main)', fontWeight: 600 }}>Rapid Peel Node</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'var(--warning-amber)' }} />
-                  <span className="font-mono-data-xs" style={{ color: 'var(--text-main)' }}>Mixer / Proxy</span>
+                  <span className="font-mono-data-xs" style={{ color: 'var(--text-main)', fontWeight: 600 }}>Mixer / Proxy</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'var(--success-emerald)' }} />
-                  <span className="font-mono-data-xs" style={{ color: 'var(--text-main)' }}>Actionable VASP Exit</span>
+                  <span className="font-mono-data-xs" style={{ color: 'var(--text-main)', fontWeight: 600 }}>Actionable VASP Exit</span>
                 </div>
               </div>
             </div>
@@ -710,10 +708,10 @@ export const ResultsPage: React.FC = () => {
 
                 <button
                   onClick={() => exportInvestigationPdf(data)}
-                  className="btn-tactical btn-tactical-primary"
+                  className="btn-tactical btn-tactical-dark"
                   style={{ width: '100%', padding: '0.65rem', fontSize: '0.78rem' }}
                 >
-                  <Lock size={16} />
+                  <Lock size={16} style={{ color: '#38bdf8' }} />
                   <span>GENERATE SEC 65B EVIDENCE CERTIFICATE</span>
                 </button>
 
@@ -768,7 +766,7 @@ export const ResultsPage: React.FC = () => {
                   <tr
                     style={{
                       borderBottom: '1px solid var(--border-tactical)',
-                      backgroundColor: 'var(--bg-surface)',
+                      backgroundColor: 'var(--bg-surface-low)',
                     }}
                   >
                     <th className="font-label-caps" style={{ padding: '0.4rem 0.65rem', color: 'var(--text-dim)' }}>
@@ -796,7 +794,8 @@ export const ResultsPage: React.FC = () => {
                         key={hop.txHash + '_' + idx}
                         style={{
                           borderBottom: '1px solid var(--border-subtle)',
-                          backgroundColor: idx % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-surface-low)',
+                          backgroundColor: 'var(--bg-surface)',
+                          transition: 'background-color 0.15s ease',
                         }}
                       >
                         <td style={{ padding: '0.5rem 0.65rem' }}>
@@ -861,7 +860,7 @@ export const ResultsPage: React.FC = () => {
         <BranchSummaryCard
           tree={data.tree || data.graph?.tree}
           selectedBranchId={selectedBranch?.branchId}
-          onSelectBranch={(b) => setSelectedBranch(selectedBranch?.branchId === b.branchId ? null : b)}
+          onSelectBranch={(b) => setSelectedBranch(b ? (selectedBranch?.branchId === b.branchId ? null : b) : null)}
         />
       )}
 
