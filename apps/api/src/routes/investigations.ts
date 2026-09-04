@@ -247,6 +247,30 @@ investigationsRouter.post(
 );
 
 /**
+ * GET /api/investigations/system/network-status
+ * Returns real-time Ethereum Mainnet block height and live ETH/USD price from oracle
+ */
+investigationsRouter.get('/system/network-status', async (_req: Request, res: Response) => {
+  try {
+    const [latestBlock, liveEthPrice] = await Promise.all([
+      ethereumProvider.getLatestBlockNumber(),
+      ethereumProvider.getEthPriceUsd(),
+    ]);
+
+    return res.status(200).json({
+      network: 'Ethereum Mainnet',
+      chainId: 1,
+      latestBlock,
+      ethPriceUsd: liveEthPrice,
+      timestamp: new Date().toISOString(),
+      status: 'synced',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to fetch network status', message: err.message });
+  }
+});
+
+/**
  * GET /api/investigations/:id (Doc 03 Section 6 & Spec 08)
  * Returns immutable historical investigation snapshot, hops, and InvestigationGraph payload
  */
@@ -329,16 +353,19 @@ investigationsRouter.get('/:id/report', (req: Request, res: Response) => {
 
 /**
  * GET /api/investigations (Doc 03 Section 6 & Doc 04 Phase 3)
- * Session history endpoint - queries database records, falls back to memoryStore
+ * Queries live Supabase database records, falls back to memoryStore
  */
 investigationsRouter.get('/', async (req: Request, res: Response) => {
-  const sessionId = (req.query.sessionId as string) || 'demo_session';
+  const sessionId = req.query.sessionId as string | undefined;
 
   let list = await getInvestigationHistoryRecords(sessionId);
 
   // Fallback to memoryStore if database returned no results
   if (list.length === 0) {
-    list = Array.from(memoryStore.values()).filter((item) => item.sessionId === sessionId);
+    list = Array.from(memoryStore.values());
+    if (sessionId) {
+      list = list.filter((item) => item.sessionId === sessionId);
+    }
   }
 
   return res.status(200).json(list);

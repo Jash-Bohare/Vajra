@@ -384,6 +384,7 @@ export async function traceWalletTree(
         contractAddress: tx.contractAddress,
         confidence: 'high',
         taintedAmountUsd: txUsdVal,
+        blockNumber: tx.blockNumber,
       };
 
       // Record Edge with cumulative root taint share

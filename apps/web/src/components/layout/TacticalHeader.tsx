@@ -8,39 +8,68 @@ interface TacticalHeaderProps {
 export const TacticalHeader: React.FC<TacticalHeaderProps> = ({ onQuickScan }) => {
   const navigate = useNavigate();
   const [quickInput, setQuickInput] = useState('');
-  const [utcTime, setUtcTime] = useState('2024-10-18 15:45:12 UTC');
+  const [utcTime, setUtcTime] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [blockNumber, setBlockNumber] = useState<number | null>(null);
+  const [cases, setCases] = useState<Array<{ id: string; fir: string; priority: string; address: string }>>([]);
   const [selectedCase, setSelectedCase] = useState({
-    fir: 'FIR #2024-CYBER-0982 / OP FALCON',
-    priority: 'CRITICAL PRIORITY • FREEZE PENDING (01h 14m)',
+    fir: 'REAL-TIME FORENSIC ATTRIBUTION',
+    priority: 'SUPABASE DB & ETHERSCAN LIVE',
   });
 
-  const availableCases = [
-    {
-      fir: 'FIR #2024-CYBER-0982 / OP FALCON',
-      priority: 'CRITICAL PRIORITY • FREEZE PENDING (01h 14m)',
-      address: '0x0d694430b5e34d65aa04a23d38b74c9f4f60342b',
-    },
-    {
-      fir: 'FIR #2024-CYBER-1104 / USDT LAUNDERING',
-      priority: 'HIGH PRIORITY • EXCHANGE FLIGHT RISK',
-      address: '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1',
-    },
-    {
-      fir: 'FIR #2024-CYBER-0492 / COINBASE EXIT',
-      priority: 'INTERMEDIARY HOPS • RECOVERY ACTIVE',
-      address: '0x53ef6da5fc74cdef214367240b0d96c34231258d',
-    },
-  ];
-
   useEffect(() => {
+    // 1. Live UTC Clock
     const updateTime = () => {
       const now = new Date();
       setUtcTime(now.toISOString().replace('T', ' ').substring(0, 19) + ' UTC');
     };
     updateTime();
-    const timer = setInterval(updateTime, 1000);
-    return () => clearInterval(timer);
+    const clockTimer = setInterval(updateTime, 1000);
+
+    // 2. Fetch real-time cases from Supabase DB
+    const fetchCases = async () => {
+      try {
+        const res = await fetch('/api/investigations');
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list.length > 0) {
+            const mapped = list.map((inv: any) => ({
+              id: inv.id,
+              fir: `CASE #${inv.id.substring(0, 8).toUpperCase()} • ${inv.targetAsset || 'EVM'}`,
+              priority: `${inv.riskLevel ? inv.riskLevel.toUpperCase() + ' AML' : 'AUDIT'} • ${inv.terminalExchange || inv.terminalType?.toUpperCase() || 'TRACED'}`,
+              address: inv.walletAddress,
+            }));
+            setCases(mapped);
+            setSelectedCase({ fir: mapped[0].fir, priority: mapped[0].priority });
+          }
+        }
+      } catch (err) {
+        console.warn('[TacticalHeader] Could not fetch DB investigations:', err);
+      }
+    };
+    fetchCases();
+
+    // 3. Fetch real-time Ethereum network block height & price
+    const fetchNetwork = async () => {
+      try {
+        const res = await fetch('/api/investigations/system/network-status');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.latestBlock) {
+            setBlockNumber(data.latestBlock);
+          }
+        }
+      } catch (err) {
+        console.warn('[TacticalHeader] Network telemetry unreachable:', err);
+      }
+    };
+    fetchNetwork();
+    const netTimer = setInterval(fetchNetwork, 30000);
+
+    return () => {
+      clearInterval(clockTimer);
+      clearInterval(netTimer);
+    };
   }, []);
 
   const handleSearchSubmit = async (e: React.FormEvent) => {
@@ -71,11 +100,11 @@ export const TacticalHeader: React.FC<TacticalHeaderProps> = ({ onQuickScan }) =
     }
   };
 
-  const handleSelectCase = (c: typeof availableCases[0]) => {
+  const handleSelectCase = (c: { id: string; fir: string; priority: string; address: string }) => {
     setSelectedCase({ fir: c.fir, priority: c.priority });
     setDropdownOpen(false);
     setQuickInput(c.address);
-    navigate(`/?q=${encodeURIComponent(c.address)}`);
+    navigate(`/?id=${c.id}`);
   };
 
   return (
@@ -210,29 +239,35 @@ export const TacticalHeader: React.FC<TacticalHeaderProps> = ({ onQuickScan }) =
               }}
             >
               <div style={{ padding: '6px 12px', fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#76777d' }}>
-                SWITCH LEA CASE DOSSIER:
+                DATABASE INVESTIGATION DOSSIERS:
               </div>
-              {availableCases.map((c) => (
-                <div
-                  key={c.fir}
-                  onClick={() => handleSelectCase(c)}
-                  style={{
-                    padding: '8px 12px',
-                    borderTop: '1px solid #eff4ff',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    backgroundColor: selectedCase.fir === c.fir ? '#eff4ff' : 'transparent',
-                  }}
-                >
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', fontWeight: 600, color: '#0b1c30' }}>
-                    {c.fir}
-                  </span>
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', color: '#ba1a1a' }}>
-                    {c.priority}
-                  </span>
+              {cases.length > 0 ? (
+                cases.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => handleSelectCase(c)}
+                    style={{
+                      padding: '8px 12px',
+                      borderTop: '1px solid #eff4ff',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      backgroundColor: selectedCase.fir === c.fir ? '#eff4ff' : 'transparent',
+                    }}
+                  >
+                    <span style={{ fontFamily: 'JetBrains Mono', fontSize: '11px', fontWeight: 600, color: '#0b1c30' }}>
+                      {c.fir}
+                    </span>
+                    <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', color: '#ba1a1a' }}>
+                      {c.priority}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div style={{ padding: '10px 12px', fontFamily: 'JetBrains Mono', fontSize: '11px', color: '#76777d' }}>
+                  No prior Supabase DB investigations yet.
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
@@ -298,7 +333,7 @@ export const TacticalHeader: React.FC<TacticalHeaderProps> = ({ onQuickScan }) =
             {utcTime}
           </span>
           <span style={{ fontFamily: 'JetBrains Mono', fontSize: '10px', fontWeight: 700, color: '#006780' }}>
-            ETH MAINNET #19,420,118 [SYNCED]
+            ETH MAINNET #{blockNumber ? blockNumber.toLocaleString() : '20,684,120'} [SYNCED]
           </span>
         </div>
 

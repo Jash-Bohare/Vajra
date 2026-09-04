@@ -288,15 +288,20 @@ export async function getInvestigationRecord(id: string): Promise<any | null> {
 /**
  * Fetch all investigation records for a session ordered by created_at DESC (Doc 03 Section 6 & Doc 04 Phase 3)
  */
-export async function getInvestigationHistoryRecords(sessionId: string): Promise<any[]> {
+export async function getInvestigationHistoryRecords(sessionId?: string): Promise<any[]> {
   try {
-    const res = await pool.query(
-      `SELECT id, session_id, wallet_address, chain, status, terminal_type, terminal_exchange, risk_level, risk_reason, risk_score, eth_price_usd, target_asset, hop_depth_used, created_at, completed_at
-       FROM investigations
-       WHERE session_id = $1
-       ORDER BY created_at DESC`,
-      [sessionId]
-    );
+    const query = sessionId
+      ? `SELECT id, session_id, wallet_address, chain, status, terminal_type, terminal_exchange, risk_level, risk_reason, risk_score, eth_price_usd, target_asset, victim_amount_usd, victim_tx_hash, hop_depth_used, created_at, completed_at
+         FROM investigations
+         WHERE session_id = $1
+         ORDER BY created_at DESC
+         LIMIT 50`
+      : `SELECT id, session_id, wallet_address, chain, status, terminal_type, terminal_exchange, risk_level, risk_reason, risk_score, eth_price_usd, target_asset, victim_amount_usd, victim_tx_hash, hop_depth_used, created_at, completed_at
+         FROM investigations
+         ORDER BY created_at DESC
+         LIMIT 50`;
+    const params = sessionId ? [sessionId] : [];
+    const res = await pool.query(query, params);
 
     return res.rows.map((inv) => ({
       id: inv.id,
@@ -311,6 +316,8 @@ export async function getInvestigationHistoryRecords(sessionId: string): Promise
       riskScore: inv.risk_score ? parseFloat(inv.risk_score) : undefined,
       ethPriceUsd: inv.eth_price_usd ? parseFloat(inv.eth_price_usd) : undefined,
       targetAsset: inv.target_asset || 'ETH',
+      victimAmountUsd: inv.victim_amount_usd ? parseFloat(inv.victim_amount_usd) : undefined,
+      victimTxHash: inv.victim_tx_hash || undefined,
       hopDepthUsed: inv.hop_depth_used,
       createdAt: inv.created_at,
       completedAt: inv.completed_at,

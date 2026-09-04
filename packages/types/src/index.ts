@@ -128,6 +128,7 @@ export interface TraceHop {
   contractAddress?: string;
   confidence?: HopConfidence;
   taintedAmountUsd?: number;
+  blockNumber?: number;
 }
 
 export interface Investigation {

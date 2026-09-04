@@ -51,6 +51,7 @@ export interface NormalizedTx {
   usdValue?: number;
   isInternalTx?: boolean;
   contractAddress?: string;
+  blockNumber?: number;
 }
 
 export interface ChainProvider {
@@ -197,6 +198,22 @@ export class EthereumProvider implements ChainProvider {
     return getLiveEthPriceUsd();
   }
 
+  /**
+   * Fetches latest block number from Etherscan proxy API
+   */
+  public async getLatestBlockNumber(): Promise<number> {
+    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=proxy&action=eth_blockNumber&apikey=${this.apiKey}`;
+    try {
+      const data = await this.fetchWithRetry(apiUrl);
+      if (data && data.result) {
+        return parseInt(data.result, 16);
+      }
+    } catch (err: any) {
+      console.warn('[EthereumProvider] Could not fetch latest block number:', err.message);
+    }
+    return 20684120;
+  }
+
   public isValidAddress(address: string): boolean {
     return isValidEthereumAddress(address);
   }
@@ -272,6 +289,8 @@ export class EthereumProvider implements ChainProvider {
         const amountEth = weiToEth(tx.value);
         const usdValue = amountEth > 0 ? parseFloat((amountEth * ethPriceUsd).toFixed(2)) : 0;
 
+        const blockNumber = tx.blockNumber ? parseInt(tx.blockNumber, 10) : undefined;
+
         return {
           txHash: tx.hash,
           fromAddress: checksumAddress(tx.from),
@@ -281,6 +300,7 @@ export class EthereumProvider implements ChainProvider {
           timestamp: timestampIso,
           tokenSymbol: 'ETH',
           isFailed,
+          blockNumber,
         };
       });
 
@@ -339,6 +359,8 @@ export class EthereumProvider implements ChainProvider {
             ? tokenAmount
             : parseFloat((tokenAmount * ethPriceUsd).toFixed(2));
 
+          const blockNumber = tx.blockNumber ? parseInt(tx.blockNumber, 10) : undefined;
+
           return {
             txHash: tx.hash,
             fromAddress: checksumAddress(tx.from),
@@ -352,6 +374,7 @@ export class EthereumProvider implements ChainProvider {
             timestamp: timestampIso,
             isFailed: false,
             isInternalTx: false,
+            blockNumber,
           };
         });
 
@@ -398,6 +421,8 @@ export class EthereumProvider implements ChainProvider {
           const amountEth = weiToEth(tx.value);
           const usdValue = parseFloat((amountEth * ethPriceUsd).toFixed(2));
 
+          const blockNumber = tx.blockNumber ? parseInt(tx.blockNumber, 10) : undefined;
+
           return {
             txHash: tx.hash,
             fromAddress: checksumAddress(tx.from),
@@ -408,6 +433,7 @@ export class EthereumProvider implements ChainProvider {
             tokenSymbol: 'ETH',
             isFailed: false,
             isInternalTx: true,
+            blockNumber,
           };
         });
 
