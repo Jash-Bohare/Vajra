@@ -1,22 +1,11 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AttributionTerminal } from './pages/AttributionTerminal';
 import { HomePage } from './pages/HomePage';
 import { HistoryPage } from './pages/HistoryPage';
 import { TacticalHeader } from './components/layout/TacticalHeader';
 import { TacticalSidebar } from './components/layout/TacticalSidebar';
-
-const RootRoute: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const id = searchParams.get('id');
-  const q = searchParams.get('q');
-
-  if (id || q) {
-    return <AttributionTerminal />;
-  }
-  return <HomePage />;
-};
 
 const AppLayout: React.FC = () => {
   const { theme } = useTheme();
@@ -45,15 +34,16 @@ const AppLayout: React.FC = () => {
           }}
         >
           <Routes>
-            <Route path="/" element={<RootRoute />} />
-            <Route path="/terminal" element={<AttributionTerminal />} />
-            <Route path="/investigations/:id/progress" element={<AttributionTerminal />} />
+            <Route path="/" element={<HomePage />} />
             <Route path="/investigations/:id" element={<AttributionTerminal />} />
+            <Route path="/investigations/:id/progress" element={<AttributionTerminal />} />
+            <Route path="/terminal" element={<Navigate to="/" replace />} />
             <Route path="/history" element={<HistoryPage />} />
             {/* Redirect legacy redundant routes to /history */}
             <Route path="/dossier" element={<Navigate to="/history" replace />} />
             <Route path="/vasp-registry" element={<Navigate to="/history" replace />} />
             <Route path="/ledger" element={<Navigate to="/history" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
       </div>
@@ -70,4 +60,5 @@ export const App: React.FC = () => {
     </ThemeProvider>
   );
 };
+
 
