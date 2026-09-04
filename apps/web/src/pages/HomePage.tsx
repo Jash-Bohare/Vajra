@@ -1,9 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AssetSummary, AssetType } from '@rt-cfas/types';
 import { TokenBadge } from '../components/TokenBadge';
+import { 
+  ShieldAlert, 
+  Search, 
+  Layers, 
+  Zap, 
+  CheckCircle2, 
+  Clock, 
+  ArrowRight,
+  FolderLock
+} from 'lucide-react';
 
 export const HomePage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [walletAddress, setWalletAddress] = useState('');
   const [targetAsset, setTargetAsset] = useState<AssetType | ''>('');
   const [victimTxHash, setVictimTxHash] = useState('');
@@ -15,15 +26,24 @@ export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const scanAbortRef = useRef<AbortController | null>(null);
 
-  const presetWallets: { label: string; address: string; asset: AssetType; victimTx?: string }[] = [
-    { label: '11-Node Multi-Hop Trail (Binance)', address: '0x0d694430b5e34d65aa04a23d38b74c9f4f60342b', asset: 'ETH' },
-    { label: 'USDT Transfer Trail (999 USDT)', address: '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1', asset: 'USDT' },
-    { label: 'DEX Routing Obfuscation (Uniswap)', address: '0x2ea1a2b899dbc43f1c61c78a634817ef90ba1eca', asset: 'ETH' },
-    { label: 'Coinbase Deposit Trail (10.99 ETH)', address: '0x53ef6da5fc74cdef214367240b0d96c34231258d', asset: 'ETH' },
-    { label: 'Binance Direct Trail (0.05 ETH)', address: '0x6f2d8b347dbfa187d1313338e0ff0120ca26a829', asset: 'ETH' },
-    { label: 'Multi-Branch Fan-Out (USDC)', address: '0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6', asset: 'USDC' },
-    { label: 'Fan-In Hourglass Splitting (USDT)', address: '0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918', asset: 'USDT' },
+  const presetWallets: { label: string; tag: string; address: string; asset: AssetType; victimTx?: string }[] = [
+    { label: '11-Node Multi-Hop Trail (Binance Exit)', tag: 'PRIORITY-1', address: '0x0d694430b5e34d65aa04a23d38b74c9f4f60342b', asset: 'ETH' },
+    { label: 'USDT Transfer Trail (999 USDT Siphon)', tag: 'FAST-TRACK', address: '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1', asset: 'USDT' },
+    { label: 'DEX Routing Obfuscation (Uniswap V3)', tag: 'DEFI-SWAP', address: '0x2ea1a2b899dbc43f1c61c78a634817ef90ba1eca', asset: 'ETH' },
+    { label: 'Coinbase Deposit Trail (10.99 ETH Exit)', tag: 'EXCHANGE', address: '0x53ef6da5fc74cdef214367240b0d96c34231258d', asset: 'ETH' },
+    { label: 'Binance Direct Trail (0.05 ETH)', tag: 'DIRECT', address: '0x6f2d8b347dbfa187d1313338e0ff0120ca26a829', asset: 'ETH' },
+    { label: 'Multi-Branch Fan-Out Cascade (USDC)', tag: 'PEEL-CHAIN', address: '0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6', asset: 'USDC' },
+    { label: 'Fan-In Hourglass Splitting (USDT)', tag: 'AGGREGATOR', address: '0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918', asset: 'USDT' },
   ];
+
+  // Check URL search parameters
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q && /^0x[a-fA-F0-9]{40}$/.test(q.trim())) {
+      setWalletAddress(q.trim());
+      executeScanAssets(q.trim());
+    }
+  }, [searchParams]);
 
   const executeScanAssets = async (addr: string, preferredAsset?: AssetType) => {
     if (!addr || !/^0x[a-fA-F0-9]{40}$/.test(addr)) {
@@ -74,7 +94,6 @@ export const HomePage: React.FC = () => {
     }
   };
 
-  // Automated debounced scanning when wallet address changes
   useEffect(() => {
     const trimmed = walletAddress.trim();
     if (/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
@@ -139,176 +158,229 @@ export const HomePage: React.FC = () => {
   const isFormReady = !!(walletAddress.trim() && /^0x[a-fA-F0-9]{40}$/.test(walletAddress.trim()) && detectedAssets && !scanning);
 
   return (
-    <div className="card">
-      <h2 style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>Start Targeted Cyber Fraud Investigation</h2>
-      <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
-        Enter a suspect wallet address. The engine automatically scans all on-chain assets (ETH, USDT, USDC, DAI) and applies decaying taint tracking to trace the exact stolen currency path.
-      </p>
-
-      {/* Preset Test Wallet Shortcuts */}
-      <div style={{ marginBottom: '1.5rem', background: '#0f172a', padding: '1rem', borderRadius: '8px', border: '1px solid #1e293b' }}>
-        <p style={{ fontSize: '0.85rem', color: 'var(--accent-cyan)', fontWeight: 600, marginBottom: '0.6rem' }}>
-          Quick Select Test Case Wallets:
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-          {presetWallets.map((item) => (
-            <button
-              key={item.address}
-              type="button"
-              onClick={() => handleSelectPreset(item)}
-              style={{
-                background: walletAddress === item.address ? '#1e293b' : '#090d16',
-                color: walletAddress === item.address ? '#38bdf8' : '#94a3b8',
-                border: '1px solid #334155',
-                padding: '0.4rem 0.8rem',
-                borderRadius: '6px',
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '1080px', margin: '0 auto', width: '100%' }}>
+      {/* Top Banner */}
+      <div className="surface-card" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-cyan)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+              <h1 className="font-headline-lg" style={{ color: 'var(--text-main)' }}>
+                Targeted Cyber Fraud Attribution Terminal
+              </h1>
+              <span className="badge-tactical badge-tactical-cyan">PHASE E2 ENGINE</span>
+            </div>
+            <p className="font-body-md" style={{ color: 'var(--text-muted)' }}>
+              Automated blockchain forensic intelligence and VASP attribution platform for Law Enforcement Agencies.
+              Scans on-chain assets, calculates decaying taint trails up to 5 hops, and prepares court-admissible electronic evidence.
+            </p>
+          </div>
         </div>
       </div>
 
-      <form onSubmit={handleStartInvestigation}>
-        {/* Suspect Wallet Input */}
-        <div style={{ marginBottom: '1.2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Suspect Wallet Address (Ethereum Mainnet)
-            </label>
-            {scanning && (
-              <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
-                Scanning on-chain assets (ETH, USDT, USDC, DAI)...
-              </span>
-            )}
-          </div>
-          <input
-            type="text"
-            placeholder="0x..."
-            value={walletAddress}
-            onChange={(e) => {
-              setWalletAddress(e.target.value);
-            }}
-            style={{
-              width: '100%',
-              padding: '0.8rem 1rem',
-              borderRadius: '8px',
-              border: `1px solid ${scanning ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
-              background: '#0f172a',
-              color: 'var(--text-main)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.95rem',
-              transition: 'border 0.2s ease',
-            }}
-          />
-        </div>
-
-        {/* Victim Transaction Reference (Optional Anchor Input) */}
-        <div style={{ marginBottom: '1.2rem', background: '#090d16', padding: '1rem', borderRadius: '8px', border: '1px solid #1e293b' }}>
-          <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', color: 'var(--accent-cyan)', fontWeight: 600 }}>
-            Victim Transaction Reference (Optional FIR Transfer Hash)
-          </label>
-          <input
-            type="text"
-            placeholder="0x... (Optional Transaction Hash of Victim's Deposit)"
-            value={victimTxHash}
-            onChange={(e) => setVictimTxHash(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.75rem 1rem',
-              borderRadius: '6px',
-              border: '1px solid #334155',
-              background: '#0f172a',
-              color: 'var(--text-main)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.85rem',
-              marginBottom: '0.4rem',
-            }}
-          />
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
-            <em>Providing a victim transaction reference locks the tracer to post-crime transfers (`timestamp &gt; T_crime`) and tracks decaying tainted funds with 100% temporal accuracy.</em>
-          </p>
-        </div>
-
-        {/* Step 2: Discovered Asset Selection Cards */}
-        {detectedAssets && detectedAssets.length > 0 && (
-          <div style={{ marginBottom: '1.5rem', background: '#090d16', padding: '1.2rem', borderRadius: '8px', border: '1px solid #1e293b' }}>
-            <p style={{ fontSize: '0.9rem', color: '#f8fafc', fontWeight: 600, marginBottom: '0.8rem' }}>
-              Select Currency Asset to Trace:
-            </p>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.8rem' }}>
-              {detectedAssets.map((asset) => {
-                const isSelected = targetAsset === asset.symbol;
-                return (
-                  <div
-                    key={asset.symbol}
-                    onClick={() => setTargetAsset(asset.symbol)}
-                    style={{
-                      background: isSelected ? '#1e293b' : '#0f172a',
-                      border: `2px solid ${isSelected ? 'var(--accent-cyan)' : '#1e293b'}`,
-                      borderRadius: '8px',
-                      padding: '0.8rem',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                      <TokenBadge symbol={asset.symbol} />
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{asset.outgoingCount} txs</span>
-                    </div>
-                    <div style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc' }}>
-                      ${asset.totalVolumeUsd.toLocaleString()} USD
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                      Total Volume: {asset.totalVolumeToken.toLocaleString()} {asset.symbol}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div style={{ color: 'var(--danger)', marginBottom: '1rem', fontSize: '0.85rem' }}>
-            {error}
-          </div>
-        )}
-
-        {/* Gated Run Investigation Button */}
-        <button
-          type="submit"
-          disabled={!isFormReady || loading}
+      {/* Preset Test Cases Matrix */}
+      <div className="surface-card">
+        <div
           style={{
-            background: isFormReady
-              ? 'linear-gradient(135deg, var(--accent-primary), var(--accent-cyan))'
-              : '#1e293b',
-            color: isFormReady ? '#fff' : '#64748b',
-            border: isFormReady ? 'none' : '1px solid #334155',
-            padding: '0.85rem 1.8rem',
-            borderRadius: '8px',
-            fontWeight: 600,
-            cursor: isFormReady && !loading ? 'pointer' : 'not-allowed',
-            fontSize: '1rem',
-            transition: 'all 0.2s ease',
+            padding: '0.65rem 1rem',
+            backgroundColor: 'var(--bg-surface-low)',
+            borderBottom: '1px solid var(--border-tactical)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
           }}
         >
-          {loading
-            ? 'Initializing Decaying Taint Tracing Engine...'
-            : scanning
-            ? 'Scanning On-Chain Assets (ETH, USDT, USDC, DAI)...'
-            : !walletAddress.trim()
-            ? 'Enter Suspect Wallet Address Above'
-            : !detectedAssets
-            ? 'Scanning On-Chain Assets...'
-            : targetAsset
-            ? `Run Targeted Investigation for ${targetAsset}`
-            : 'Run Investigation'}
-        </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <FolderLock size={14} style={{ color: 'var(--accent-cyan-bright)' }} />
+            <span className="font-label-caps" style={{ color: 'var(--text-main)' }}>
+              VERIFIED INVESTIGATION PRESETS (LAW ENFORCEMENT CATALOG)
+            </span>
+          </div>
+          <span className="font-mono-data-xs" style={{ color: 'var(--text-dim)' }}>
+            7 TEST TRAILS READY
+          </span>
+        </div>
+
+        <div style={{ padding: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '0.65rem' }}>
+          {presetWallets.map((item) => {
+            const isSelected = walletAddress === item.address;
+            return (
+              <button
+                key={item.address}
+                type="button"
+                onClick={() => handleSelectPreset(item)}
+                style={{
+                  textAlign: 'left',
+                  backgroundColor: isSelected ? 'var(--bg-surface-elevated)' : 'var(--bg-surface-low)',
+                  border: isSelected ? '1px solid var(--accent-cyan)' : '1px solid var(--border-tactical)',
+                  borderRadius: '4px',
+                  padding: '0.75rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: isSelected ? '0 0 10px var(--border-cyan)' : 'none',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <span className="font-headline-sm" style={{ color: 'var(--text-main)', fontSize: '0.85rem' }}>
+                    {item.label}
+                  </span>
+                  <span className="badge-tactical badge-tactical-cyan" style={{ fontSize: '0.55rem' }}>
+                    {item.tag}
+                  </span>
+                </div>
+                <div className="font-mono-data-xs" style={{ color: 'var(--accent-cyan)' }}>
+                  {item.address.substring(0, 10)}...{item.address.substring(item.address.length - 8)}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Main Intake Form */}
+      <form onSubmit={handleStartInvestigation} className="surface-card" style={{ padding: '1.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {error && (
+            <div
+              style={{
+                backgroundColor: 'var(--danger-container)',
+                border: '1px solid var(--danger-border)',
+                padding: '0.75rem 1rem',
+                borderRadius: '4px',
+                color: 'var(--danger-crimson)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem',
+                fontSize: '0.85rem',
+              }}
+            >
+              <ShieldAlert size={16} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Suspect Wallet Input */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+              <label className="font-label-caps" style={{ color: 'var(--text-main)' }}>
+                SUSPECT WALLET ADDRESS (EVM MAINNET)
+              </label>
+              {scanning && (
+                <span className="font-mono-data-xs" style={{ color: 'var(--accent-cyan-bright)' }}>
+                  Scanning on-chain holdings...
+                </span>
+              )}
+            </div>
+            <input
+              type="text"
+              className="input-tactical"
+              style={{ width: '100%', padding: '0.65rem', fontSize: '0.85rem' }}
+              value={walletAddress}
+              onChange={(e) => setWalletAddress(e.target.value)}
+              placeholder="0x..."
+              required
+            />
+          </div>
+
+          {/* Asset Detection Preview */}
+          {detectedAssets && (
+            <div
+              style={{
+                backgroundColor: 'var(--bg-surface-low)',
+                border: '1px solid var(--border-tactical)',
+                borderRadius: '4px',
+                padding: '1rem',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                <span className="font-label-caps" style={{ color: 'var(--text-dim)' }}>
+                  DETECTED CURRENCY HOLDINGS
+                </span>
+                <span className="font-mono-data-xs" style={{ color: 'var(--text-muted)' }}>
+                  Select Target Currency for Taint Propagation
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.65rem' }}>
+                {detectedAssets.map((asset) => {
+                  const isSelected = targetAsset === asset.symbol;
+                  return (
+                    <button
+                      key={asset.symbol}
+                      type="button"
+                      onClick={() => setTargetAsset(asset.symbol)}
+                      style={{
+                        backgroundColor: isSelected ? 'var(--bg-surface-elevated)' : 'var(--bg-surface)',
+                        border: isSelected ? '1px solid var(--accent-cyan)' : '1px solid var(--border-tactical)',
+                        borderRadius: '4px',
+                        padding: '0.5rem 0.85rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        boxShadow: isSelected ? '0 0 10px rgba(6, 182, 212, 0.25)' : 'none',
+                      }}
+                    >
+                      <TokenBadge symbol={asset.symbol} />
+                      <div style={{ textAlign: 'left' }}>
+                        <span className="font-mono-data-xs" style={{ color: 'var(--text-main)', fontWeight: 600, display: 'block' }}>
+                          {asset.totalVolumeToken.toFixed(3)} {asset.symbol}
+                        </span>
+                        {asset.totalVolumeUsd !== undefined && (
+                          <span className="font-mono-data-xs" style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>
+                            ${Math.round(asset.totalVolumeUsd).toLocaleString()} USD ({asset.outgoingCount} txs)
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Victim FIR Hash Reference */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+              <label className="font-label-caps" style={{ color: 'var(--text-main)' }}>
+                VICTIM FIR TX HASH REFERENCE (TEMPORAL GATING ANCHOR)
+              </label>
+              <span className="font-mono-data-xs" style={{ color: 'var(--text-dim)' }}>
+                Optional • Restricts graph to transfers post-theft
+              </span>
+            </div>
+            <input
+              type="text"
+              className="input-tactical"
+              style={{ width: '100%', padding: '0.65rem', fontSize: '0.85rem' }}
+              value={victimTxHash}
+              onChange={(e) => setVictimTxHash(e.target.value)}
+              placeholder="0x... (e.g. Origin transaction of reported theft)"
+            />
+          </div>
+
+          {/* Submit Trigger */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.5rem' }}>
+            <button
+              type="submit"
+              disabled={loading || scanning}
+              className="btn-tactical btn-tactical-primary"
+              style={{
+                padding: '0.75rem 1.5rem',
+                fontSize: '0.85rem',
+                opacity: loading || scanning ? 0.6 : 1,
+              }}
+            >
+              {loading ? (
+                <span>Dispatching Heuristic Engine...</span>
+              ) : (
+                <>
+                  <span>DISPATCH ON-CHAIN FORENSIC TRACE</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </form>
     </div>
   );
