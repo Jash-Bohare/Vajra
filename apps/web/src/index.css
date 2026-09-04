@@ -13,9 +13,9 @@
   --border-cyan: rgba(0, 103, 128, 0.3);
   --border-crimson: rgba(186, 26, 26, 0.25);
   
-  --accent-cyan: #006780;
-  --accent-cyan-bright: #006780;
-  --accent-cyan-glow: rgba(0, 103, 128, 0.15);
+  --accent-cyan: #0284c7;
+  --accent-cyan-bright: #0284c7;
+  --accent-cyan-glow: transparent;
   --accent-blue: #2563eb;
   
   --danger-crimson: #ba1a1a;
@@ -31,15 +31,15 @@
   --success-border: #a7f3d0;
   
   --text-main: #0b1c30;
-  --text-muted: #45464d;
-  --text-dim: #76777d;
+  --text-muted: #334155;
+  --text-dim: #475569;
   --text-inverse: #ffffff;
 
   --font-headline: 'Space Grotesk', -apple-system, sans-serif;
   --font-body: 'Space Grotesk', 'Inter', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   
-  --card-shadow: 0 1px 3px rgba(11, 28, 48, 0.06), 0 1px 2px rgba(11, 28, 48, 0.04);
+  --card-shadow: none;
 }
 
 /* Dark mode overrides when class 'dark' is present */
@@ -58,8 +58,8 @@
   --border-crimson: rgba(239, 68, 68, 0.4);
   
   --accent-cyan: #06b6d4;
-  --accent-cyan-bright: #4cd7f6;
-  --accent-cyan-glow: rgba(6, 182, 212, 0.2);
+  --accent-cyan-bright: #38bdf8;
+  --accent-cyan-glow: transparent;
   --accent-blue: #3b82f6;
   
   --danger-crimson: #ef4444;
@@ -74,12 +74,12 @@
   --success-container: rgba(16, 185, 129, 0.12);
   --success-border: #065f46;
   
-  --text-main: #f1f5f9;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
+  --text-main: #f8fafc;
+  --text-muted: #cbd5e1;
+  --text-dim: #94a3b8;
   --text-inverse: #080b10;
 
-  --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  --card-shadow: none;
 }
 
 * {
@@ -217,7 +217,6 @@ body {
   border-radius: 4px;
   position: relative;
   overflow: hidden;
-  box-shadow: var(--card-shadow);
 }
 
 .surface-card-low {
@@ -302,21 +301,49 @@ body {
 }
 
 .btn-tactical-primary {
-  background-color: #0b1c30;
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, #0284c7 100%);
   color: #ffffff;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  font-weight: 700;
 }
 .btn-tactical-primary:hover {
-  background-color: #132742;
-  box-shadow: 0 2px 8px rgba(11, 28, 48, 0.2);
+  filter: brightness(1.12);
+  transform: translateY(-1px);
 }
 
 .btn-tactical-danger {
-  background-color: var(--danger-crimson);
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
   color: #ffffff;
-  border: 1px solid var(--danger-border);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  font-weight: 700;
 }
 .btn-tactical-danger:hover {
-  background-color: var(--danger-critical);
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  transform: translateY(-1px);
+}
+
+.btn-tactical-dark {
+  background-color: #090d16;
+  color: #ffffff;
+  border: 1px solid #1e293b;
+  font-weight: 700;
+}
+.btn-tactical-dark:hover {
+  background-color: #161f2e;
+  border-color: #334155;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.btn-tactical-emerald {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: #ffffff;
+  border: 1px solid rgba(5, 150, 105, 0.4);
+  font-weight: 700;
+}
+.btn-tactical-emerald:hover {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  transform: translateY(-1px);
 }
 
 .btn-tactical-ghost {
@@ -334,10 +361,12 @@ body {
   background-color: var(--bg-surface-low);
   color: var(--text-main);
   border: 1px solid var(--border-tactical);
+  font-weight: 600;
 }
 .btn-tactical-secondary:hover {
   background-color: var(--bg-surface-container);
   border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
 }
 
 /* Tactical Inputs */
@@ -350,11 +379,10 @@ body {
   padding: 0.45rem 0.75rem;
   border-radius: 3px;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 .input-tactical:focus {
   border-color: var(--accent-cyan);
-  box-shadow: 0 0 0 1px var(--accent-cyan);
 }
 .input-tactical::placeholder {
   color: var(--text-dim);
