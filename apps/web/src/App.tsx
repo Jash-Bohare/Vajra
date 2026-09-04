@@ -1,9 +1,22 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AttributionTerminal } from './pages/AttributionTerminal';
+import { HomePage } from './pages/HomePage';
 import { HistoryPage } from './pages/HistoryPage';
 import { TacticalHeader } from './components/layout/TacticalHeader';
 import { TacticalSidebar } from './components/layout/TacticalSidebar';
+import { useSearchParams } from 'react-router-dom';
+
+const RootRoute: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const id = searchParams.get('id');
+  const q = searchParams.get('q');
+
+  if (id || q) {
+    return <AttributionTerminal />;
+  }
+  return <HomePage />;
+};
 
 export const App: React.FC = () => {
   return (
@@ -16,7 +29,8 @@ export const App: React.FC = () => {
 
           <main style={{ flex: 1, marginLeft: '256px', padding: '16px 24px', minWidth: 0 }}>
             <Routes>
-              <Route path="/" element={<AttributionTerminal />} />
+              <Route path="/" element={<RootRoute />} />
+              <Route path="/terminal" element={<AttributionTerminal />} />
               <Route path="/investigations/:id/progress" element={<AttributionTerminal />} />
               <Route path="/investigations/:id" element={<AttributionTerminal />} />
               <Route path="/history" element={<HistoryPage />} />

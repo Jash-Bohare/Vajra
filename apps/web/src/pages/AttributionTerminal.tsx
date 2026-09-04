@@ -445,9 +445,13 @@ export const AttributionTerminal: React.FC = () => {
             LIVE TEST TARGETS:
           </span>
           {[
-            { label: 'OP-FALCON EXPLOITER', addr: '0x0d694430b5e34d65aa04a23d38b74c9f4f60342b' },
-            { label: 'USDT LAUNDERING NODE', addr: '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1' },
-            { label: 'COINBASE DEPOSIT FLIGHT', addr: '0x53ef6da5fc74cdef214367240b0d96c34231258d' },
+            { label: '11-NODE MULTI-HOP (BINANCE)', addr: '0x0d694430b5e34d65aa04a23d38b74c9f4f60342b' },
+            { label: 'USDT TRANSFER (999 USDT)', addr: '0xcc06d5e8f7bac7d85dcd07ff70790c0c500f1fe1' },
+            { label: 'DEX ROUTING (UNISWAP)', addr: '0x2ea1a2b899dbc43f1c61c78a634817ef90ba1eca' },
+            { label: 'COINBASE DEPOSIT (10.99 ETH)', addr: '0x53ef6da5fc74cdef214367240b0d96c34231258d' },
+            { label: 'BINANCE DIRECT (0.05 ETH)', addr: '0x6f2d8b347dbfa187d1313338e0ff0120ca26a829' },
+            { label: 'MULTI-BRANCH FAN-OUT (USDC)', addr: '0xbdb3ba9ffe392549e1f8658dd2630c141fdf47b6' },
+            { label: 'FAN-IN HOURGLASS (USDT)', addr: '0x7b09fc3bdd9a1eb0059f0c9d391f5d684e0f9918' },
           ].map((chip) => (
             <button
               key={chip.addr}

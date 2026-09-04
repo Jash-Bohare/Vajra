@@ -6,9 +6,14 @@ export const TacticalSidebar: React.FC = () => {
 
   const navItems = [
     {
-      label: 'Fund Flow Attribution',
+      label: 'New Investigation Intake',
       path: '/',
       exact: true,
+    },
+    {
+      label: 'Fund Flow Attribution',
+      path: '/terminal',
+      isTerminal: true,
     },
     {
       label: 'Case Dossier & Evidence',
@@ -64,10 +69,11 @@ export const TacticalSidebar: React.FC = () => {
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 8px' }}>
           {navItems.map((item) => {
-            const isActive =
-              item.exact
-                ? location.pathname === '/' || location.pathname.startsWith('/investigations/')
-                : location.pathname.startsWith(item.path);
+            const isActive = item.isTerminal
+              ? location.pathname === '/terminal' || location.pathname.startsWith('/investigations/')
+              : item.exact
+              ? location.pathname === '/'
+              : location.pathname.startsWith(item.path);
 
             return (
               <NavLink
