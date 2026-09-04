@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTheme } from '../context/ThemeContext';
 
 /**
  * P1-B: Investigator Action Card
@@ -12,6 +13,7 @@ interface ActionStep {
   detail: string;
   url?: string;
   urlLabel?: string;
+  icon: string;
 }
 
 interface ExchangeInfo {
@@ -26,7 +28,7 @@ interface ExchangeInfo {
 const EXCHANGE_LEA_INFO: Record<string, ExchangeInfo> = {
   Binance: {
     leaPortalUrl: 'https://www.binance.com/en/support/law-enforcement',
-    leaPortalName: 'Binance LEA Portal',
+    leaPortalName: 'Binance LEA Portal (Kodex)',
     leaEmail: 'law_enforcement@binance.com',
     responseTimeDays: '3-7 business days',
     jurisdiction: 'Cayman Islands / Global',
@@ -85,7 +87,7 @@ const EXCHANGE_LEA_INFO: Record<string, ExchangeInfo> = {
     leaEmail: 'compliance@wazirx.com',
     responseTimeDays: '2-5 business days',
     jurisdiction: 'India (registered entity)',
-    notes: 'Indian jurisdiction. Fastest response for Indian LEA agencies. Can work with SAHYOG platform.',
+    notes: 'Indian jurisdiction. Fastest response for Indian LEA agencies. Integrates with SAHYOG platform.',
   },
   CoinDCX: {
     leaPortalUrl: 'https://coindcx.com/compliance',
@@ -141,36 +143,41 @@ function getActionSteps(exchangeName: string, walletAddress: string, txHash?: st
   const steps: ActionStep[] = [
     {
       step: 1,
-      action: 'Submit Preservation Request (Immediate)',
-      detail: `Contact ${exchangeName} compliance team to preserve KYC records and account data linked to deposit address. Do NOT disclose investigative details at this stage.`,
+      icon: 'lock_clock',
+      action: 'Submit Preservation Request (Immediate Action)',
+      detail: `Contact ${exchangeName} legal compliance to preserve KYC records, login IP audit trails, and account balances linked to the deposit address. Request immediate 90-day preservation under 18 U.S.C. § 2703(f) / Section 91 Cr.P.C.`,
       url: info?.leaPortalUrl,
       urlLabel: info?.leaPortalName || `${exchangeName} LEA Portal`,
     },
     {
       step: 2,
-      action: 'Obtain Judicial Authorization',
-      detail: 'File application before the competent court for account freeze and disclosure order under Section 91 CrPC / PMLA Section 17 / IT Act. Attach this PDF report as Annexure A.',
+      icon: 'gavel',
+      action: 'Obtain Judicial Disclosure & Freezing Order',
+      detail: 'File an emergency petition before the designated jurisdictional magistrate / court for account freezing and disclosure order under Section 91 Cr.P.C. / PMLA Section 17. Attach the Section 65B Certificate & Merkle root from this dossier as Annexure A.',
     },
     {
       step: 3,
-      action: 'Submit Freeze Request via SAHYOG',
-      detail: `After judicial order, submit formal freeze request through the SAHYOG Portal (MHA). Include suspect wallet (${walletAddress.substring(0, 12)}...) and traced deposit at ${exchangeName}.`,
+      icon: 'security',
+      action: 'Submit Freeze Order via SAHYOG Portal',
+      detail: `Transmit the formal freeze order through the MHA SAHYOG Platform. Reference suspect wallet (${walletAddress.substring(0, 10)}...) and target VASP deposit endpoint at ${exchangeName}.`,
       url: 'https://sahyog.cybercrime.gov.in',
       urlLabel: 'SAHYOG Portal (MHA)',
     },
     {
       step: 4,
-      action: 'Register Complaint on NCRP',
-      detail: 'Guide the victim to file a complaint on the National Cyber Crime Reporting Portal. This generates a NCRP complaint ID required for formal coordination.',
+      icon: 'report',
+      action: 'Synchronize NCRP Complaint Registry',
+      detail: 'Ensure the victim grievance is registered on the National Cyber Crime Reporting Portal (NCRP) to auto-generate the inter-agency Acknowledgement Number.',
       url: 'https://cybercrime.gov.in',
       urlLabel: 'NCRP Portal (cybercrime.gov.in)',
     },
     ...(txHash ? [{
       step: 5,
-      action: 'Attach On-Chain Evidence',
-      detail: `Victim transaction ${txHash.substring(0, 14)}... is anchored as taint origin. Attach the Etherscan record as court evidence alongside this PDF.`,
+      icon: 'link',
+      action: 'Anchor On-Chain Cryptographic Proof',
+      detail: `Victim inception transaction ${txHash.substring(0, 16)}... is anchored as root taint origin. Append the raw blockchain transaction receipt to the case diary.`,
       url: `https://etherscan.io/tx/${txHash}`,
-      urlLabel: 'View Victim Tx on Etherscan',
+      urlLabel: 'Verify Root Tx on Etherscan',
     }] : []),
   ];
   return steps;
@@ -187,100 +194,203 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
   walletAddress,
   victimTxHash,
 }) => {
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
   const [expanded, setExpanded] = useState(true);
   const info = EXCHANGE_LEA_INFO[exchangeName];
   const steps = getActionSteps(exchangeName, walletAddress, victimTxHash);
 
   return (
     <div
-      className="card"
-      style={{ border: '1px solid #065f46', background: 'linear-gradient(135deg, #020f09 0%, #0a1f14 100%)' }}
+      style={{
+        backgroundColor: 'var(--bg-surface)',
+        border: '1px solid var(--success-border)',
+        borderRadius: '6px',
+        overflow: 'hidden',
+      }}
     >
-      {/* Header */}
+      {/* Header Bar */}
       <div
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', cursor: 'pointer' }}
+        style={{
+          padding: '16px 20px',
+          backgroundColor: isLight ? '#f0fdf4' : 'rgba(5, 150, 105, 0.1)',
+          borderBottom: '1px solid var(--border-tactical)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          cursor: 'pointer',
+        }}
         onClick={() => setExpanded(!expanded)}
       >
-        <div>
-          <h2 style={{ fontSize: '1.1rem', marginBottom: '0.3rem', color: '#10b981' }}>
-            Actionable Intelligence for Investigators
-          </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-            Exchange identified: <strong style={{ color: '#10b981' }}>{exchangeName}</strong>
-            {info && (
-              <span style={{ marginLeft: '0.6rem', color: '#94a3b8' }}>
-                · {info.jurisdiction} · Avg. response: {info.responseTimeDays}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '6px',
+              backgroundColor: 'var(--success-container)',
+              color: 'var(--success-emerald)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid var(--success-border)',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>local_police</span>
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 style={{ fontFamily: 'var(--font-headline)', fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
+                Law Enforcement Officer Action Playbook
+              </h3>
+              <span
+                style={{
+                  padding: '2px 8px',
+                  backgroundColor: 'var(--success-container)',
+                  color: 'var(--success-emerald)',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono)',
+                  border: '1px solid var(--success-border)',
+                }}
+              >
+                TARGET: {exchangeName}
               </span>
-            )}
-          </p>
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '2px 0 0 0' }}>
+              {info ? `${info.jurisdiction} · Expected turnaround: ${info.responseTimeDays}` : 'Preservation & subpoena playbook for verified exchange exit'}
+            </p>
+          </div>
         </div>
-        <button
-          style={{
-            background: 'none',
-            border: '1px solid #065f46',
-            color: '#10b981',
-            borderRadius: '6px',
-            padding: '0.3rem 0.8rem',
-            cursor: 'pointer',
-            fontSize: '0.8rem',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {expanded ? 'Collapse' : 'Expand'}
-        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            style={{
+              padding: '6px 12px',
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-main)',
+              border: '1px solid var(--border-tactical)',
+              borderRadius: '4px',
+              fontFamily: 'var(--font-headline)',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+              {expanded ? 'expand_less' : 'expand_more'}
+            </span>
+            <span>{expanded ? 'Collapse' : 'Expand'}</span>
+          </button>
+        </div>
       </div>
 
       {expanded && (
-        <>
+        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Intelligence Note Banner */}
           {info && (
-            <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', background: '#0a1f14', borderRadius: '6px', border: '1px solid #064e3b', fontSize: '0.82rem', color: '#86efac' }}>
-              <span style={{ fontWeight: 600 }}>Intelligence Note: </span>
-              {info.notes}
-              {info.leaEmail && (
-                <span style={{ marginLeft: '0.5rem', color: '#6ee7b7' }}>
-                  · LEA Email: <a href={`mailto:${info.leaEmail}`} style={{ color: '#34d399' }}>{info.leaEmail}</a>
-                </span>
-              )}
+            <div
+              style={{
+                padding: '10px 14px',
+                backgroundColor: isLight ? '#f0fdf4' : 'rgba(5, 150, 105, 0.08)',
+                border: '1px solid var(--success-border)',
+                borderRadius: '5px',
+                fontSize: '12px',
+                color: 'var(--text-main)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--success-emerald)', marginTop: '1px' }}>
+                verified_user
+              </span>
+              <div>
+                <strong style={{ color: 'var(--success-emerald)' }}>Operational Intelligence: </strong>
+                {info.notes}
+                {info.leaEmail && (
+                  <span style={{ marginLeft: '6px', color: 'var(--accent-cyan)' }}>
+                    (Compliance Email: <a href={`mailto:${info.leaEmail}`} style={{ color: 'var(--accent-cyan)', textDecoration: 'underline' }}>{info.leaEmail}</a>)
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
-          <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          {/* Action Steps Grid */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {steps.map((step) => (
               <div
                 key={step.step}
                 style={{
                   display: 'flex',
-                  gap: '0.8rem',
-                  padding: '0.75rem',
-                  background: '#0f1e16',
+                  gap: '12px',
+                  padding: '12px 14px',
+                  backgroundColor: 'var(--bg-surface-low)',
                   borderRadius: '6px',
-                  border: '1px solid #1a3a26',
+                  border: '1px solid var(--border-tactical)',
                   alignItems: 'flex-start',
                 }}
               >
-                <div style={{
-                  minWidth: '28px', height: '28px', borderRadius: '50%',
-                  background: step.step === 1 ? '#065f46' : '#1e293b',
-                  border: step.step === 1 ? '2px solid #10b981' : '2px solid #334155',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.75rem', fontWeight: 700,
-                  color: step.step === 1 ? '#10b981' : '#64748b',
-                  flexShrink: 0,
-                }}>
+                <div
+                  style={{
+                    minWidth: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    backgroundColor: step.step === 1 ? 'var(--success-container)' : 'var(--bg-surface)',
+                    border: `1px solid ${step.step === 1 ? 'var(--success-border)' : 'var(--border-tactical)'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '11px',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    color: step.step === 1 ? 'var(--success-emerald)' : 'var(--text-main)',
+                    flexShrink: 0,
+                  }}
+                >
                   {step.step}
                 </div>
+
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem', marginBottom: '0.25rem', color: '#f1f5f9' }}>
-                    {step.action}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--accent-cyan)' }}>
+                      {step.icon}
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-headline)', fontWeight: 700, fontSize: '13px', color: 'var(--text-main)' }}>
+                      {step.action}
+                    </span>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: '1.5' }}>
+
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.5', margin: '0 0 6px 0' }}>
                     {step.detail}
-                  </div>
+                  </p>
+
                   {step.url && (
-                    <a href={step.url} target="_blank" rel="noreferrer"
-                      style={{ display: 'inline-block', marginTop: '0.4rem', color: '#34d399', fontSize: '0.78rem', fontWeight: 600, textDecoration: 'none' }}
+                    <a
+                      href={step.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        color: 'var(--accent-cyan)',
+                        fontSize: '12px',
+                        fontFamily: 'var(--font-headline)',
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                      }}
                     >
-                      {step.urlLabel} ↗
+                      <span>{step.urlLabel}</span>
+                      <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>open_in_new</span>
                     </a>
                   )}
                 </div>
@@ -288,10 +398,10 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
             ))}
           </div>
 
-          <p style={{ marginTop: '0.8rem', fontSize: '0.75rem', color: '#475569', borderTop: '1px solid #1e293b', paddingTop: '0.6rem' }}>
-            This intelligence is generated automatically by RT-CFAS (Vajra). All actions require proper judicial authorization. Use in conjunction with the attached PDF investigation report.
+          <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-dim)', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontFamily: 'var(--font-mono)' }}>
+            NOTICE: This workflow complies with Standard Operating Procedures for Cryptocurrency Tracing & Recovery. Ensure proper judicial seal before initiating foreign exchange communications.
           </p>
-        </>
+        </div>
       )}
     </div>
   );

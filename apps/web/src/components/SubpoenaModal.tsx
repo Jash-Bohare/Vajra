@@ -98,7 +98,6 @@ Section 65B Certified Forensic Custody Stamp: SHA256-7f89c4d291e0a`;
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 0 40px rgba(0,0,0,0.8), 0 0 20px rgba(239, 68, 68, 0.15)',
           border: '1px solid var(--danger-crimson)',
         }}
       >
@@ -163,8 +162,9 @@ Section 65B Certified Forensic Custody Stamp: SHA256-7f89c4d291e0a`;
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.65rem',
-                color: '#6ee7b7',
+                color: 'var(--success-emerald)',
                 fontSize: '0.85rem',
+                fontWeight: 600,
               }}
             >
               <Check size={16} />
@@ -205,7 +205,7 @@ Section 65B Certified Forensic Custody Stamp: SHA256-7f89c4d291e0a`;
               <span className="font-label-caps" style={{ color: 'var(--text-dim)', display: 'block' }}>
                 LEGAL JURISDICTION
               </span>
-              <span className="font-mono-data-sm" style={{ color: 'var(--accent-cyan-bright)' }}>
+              <span className="font-mono-data-sm" style={{ color: 'var(--accent-cyan)' }}>
                 Interpol 24/7 Focal Point
               </span>
             </div>
@@ -222,13 +222,13 @@ Section 65B Certified Forensic Custody Stamp: SHA256-7f89c4d291e0a`;
             </div>
             <pre
               style={{
-                backgroundColor: '#04070c',
+                backgroundColor: 'var(--bg-surface-low)',
                 border: '1px solid var(--border-tactical)',
                 borderRadius: '4px',
                 padding: '0.85rem',
                 fontFamily: 'var(--font-mono)',
                 fontSize: '0.72rem',
-                color: '#cbd5e1',
+                color: 'var(--text-main)',
                 lineHeight: '1.45',
                 overflowX: 'auto',
                 whiteSpace: 'pre-wrap',
@@ -263,10 +263,10 @@ Section 65B Certified Forensic Custody Stamp: SHA256-7f89c4d291e0a`;
             </button>
             <button
               onClick={handleDownload}
-              className="btn-tactical btn-tactical-secondary"
+              className="btn-tactical btn-tactical-dark"
               style={{ fontSize: '0.78rem' }}
             >
-              <Download size={14} />
+              <Download size={14} style={{ color: '#38bdf8' }} />
               <span>Export Directive (.TXT)</span>
             </button>
           </div>
