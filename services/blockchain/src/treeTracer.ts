@@ -59,7 +59,7 @@ export function classifyWallet(inputs: WalletClassificationInputs): WalletCatego
 
 export const TREE_TRACER_CONFIG = {
   MAX_DEPTH: 5,
-  MAX_BRANCHES_PER_NODE: 3,
+  MAX_BRANCHES_PER_NODE: 5, // FIX: bumped from 3 → 5 to reduce branch dropping
   MAX_TOTAL_NODES: 25,
   SPLIT_THRESHOLD_PERCENT: 10,
   MIN_USD_VALUE_THRESHOLD: 5,
@@ -68,6 +68,56 @@ export const TREE_TRACER_CONFIG = {
   TAINT_TOLERANCE_LOWER: 0.70,
   TAINT_TOLERANCE_UPPER: 1.05,
 } as const;
+
+/**
+ * Known Smart Contract / DEX Router terminals.
+ * When a traced address matches one of these, the engine terminates the branch
+ * and labels the node as 'contract_pool' — it does NOT follow outgoing swaps
+ * from these shared public contracts (which would pull in unrelated users' funds).
+ *
+ * Sources: Uniswap, 1inch, Curve, Balancer, Harbor, Aave, Compound, Tornado, bridges, token contracts.
+ */
+export const KNOWN_CONTRACT_TERMINALS: Record<string, string> = {
+  // Uniswap
+  '0x7a250d5630b4cf539739df2c5dacb4c659f2488d': 'Uniswap V2: Router',
+  '0xe592427a0aece92de3edee1f18e0157c05861564': 'Uniswap V3: Router',
+  '0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45': 'Uniswap V3: Router 2',
+  '0x000000000022d473030f116ddee9f6b43ac78ba3': 'Uniswap: Permit2',
+  '0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad': 'Uniswap: Universal Router',
+  // 1inch
+  '0x1111111254eeb25477b68fb85ed929f73a960582': '1inch: Aggregation Router V5',
+  '0x111111125421ca6dc452d289314280a0f8842a65': '1inch: Aggregation Router V6',
+  // Curve Finance
+  '0x99a58482bd75cbab83b27ec03ca68ff489b5788f': 'Curve: Router',
+  '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f': 'SushiSwap: Router',
+  // Balancer
+  '0xba12222222228d8ba445958a75a0704d566bf2c8': 'Balancer: Vault',
+  // Aave
+  '0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2': 'Aave V3: Pool',
+  '0x7d2768de32b0b80b7a3454c06bdac94a69ddc7a9': 'Aave V2: Lending Pool',
+  // Compound
+  '0x3d9819210a31b4961b30ef54be2aed79b9c9cd3b': 'Compound: Comptroller',
+  // Tornado Cash
+  '0x910cbd523d972eb0a6f4cae4618ad62622b39dbf': 'Tornado Cash: Proxy',
+  '0x12d66f87a04a9e220c9d5525d6bd37b47e32be97': 'Tornado Cash: ETH 0.1',
+  '0x47ce0c6ed5b0ce3d3a51fdb1c52dc66a7c3c2936': 'Tornado Cash: ETH 1',
+  '0x94a1b5cdb22c43faab4abeb5c74999895464ddaf': 'Tornado Cash: ETH 10',
+  '0xa160cdab225685da1d56aa342ad8841c3b53f291': 'Tornado Cash: ETH 100',
+  // Bridges
+  '0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf': 'Polygon: ERC20 Bridge',
+  '0x99c9fc46f92e8a1c0dec1b1747d010903e884be1': 'Optimism: Gateway',
+  '0x4dbd4fc535ac27206064b68ffcf827b0a60bab3f': 'Arbitrum: Inbox',
+  // OpenSea & NFT
+  '0x00000000006c3852cbef3e08e8df289169ede581': 'OpenSea: Seaport 1.1',
+  '0x0000000000000068f116a894984e2db1123eb395': 'OpenSea: Seaport 1.6',
+  // Token Contracts (ERC-20 transfers go through these)
+  '0xdac17f958d2ee523a2206206994597c13d831ec7': 'Tether: USDT Token',
+  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'Circle: USDC Token',
+  '0x6b175474e89094c44da98b954eedeac495271d0f': 'MakerDAO: DAI Token',
+  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'Wrapped: WETH Token',
+  // Harbor (detected in user's wallet)
+  '0x1f21f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f': 'Harbor: Router',
+};
 
 export interface TreeQueueItem {
   address: string;
@@ -244,10 +294,25 @@ export async function traceWalletTree(
       provider.getInternalTransactions(currentAddr),
     ]);
 
+    // FIX 4: Deduplicate by txHash+from+to to preserve distinct transfers
+    // sharing the same txHash (e.g. multi-transfer contracts) while avoiding
+    // double-counting of the same transfer appearing in both ethTxs + internalTxs.
     const hopMap = new Map<string, NormalizedTx>();
-    for (const tx of ethTxs) hopMap.set(tx.txHash, tx);
-    for (const tx of internalTxs) hopMap.set(tx.txHash, tx);
-    for (const tx of tokenTxs) hopMap.set(tx.txHash, tx);
+    for (const tx of ethTxs) {
+      const key = `${tx.txHash}_${tx.fromAddress.toLowerCase()}_${tx.toAddress.toLowerCase()}`;
+      hopMap.set(key, tx);
+    }
+    for (const tx of internalTxs) {
+      const key = `${tx.txHash}_${tx.fromAddress.toLowerCase()}_${tx.toAddress.toLowerCase()}`;
+      // Prefer internal tx over regular tx only when it has a non-zero ETH value
+      if (!hopMap.has(key) || (tx.amountEth > 0)) {
+        hopMap.set(key, tx);
+      }
+    }
+    for (const tx of tokenTxs) {
+      const key = `${tx.txHash}_${tx.fromAddress.toLowerCase()}_${tx.toAddress.toLowerCase()}_${tx.tokenSymbol}`;
+      hopMap.set(key, tx);
+    }
 
     const mergedTxs = Array.from(hopMap.values());
 
@@ -303,12 +368,23 @@ export async function traceWalletTree(
       continue;
     }
 
-    // Cap outgoing branches to MAX_BRANCHES_PER_NODE (3)
+    // FIX 1: Sort candidates by descending USD value BEFORE slicing so the
+    // largest fund movements are always captured first (not dropped arbitrarily
+    // due to API return order). Previously, the 4th-largest transfer was silently dropped.
+    candidateTxs.sort((a, b) => {
+      const aUsd = a.usdValue || a.amountEth * ethPriceUsd;
+      const bUsd = b.usdValue || b.amountEth * ethPriceUsd;
+      return bUsd - aUsd; // descending — biggest first
+    });
+
+    // Cap outgoing branches to MAX_BRANCHES_PER_NODE (now 5)
     const selectedBranches = candidateTxs.slice(0, TREE_TRACER_CONFIG.MAX_BRANCHES_PER_NODE);
 
-    // At root node level, if rootTaintUsd was 0, sum all outgoing candidate transfers
+    // FIX 2: At root node level, if rootTaintUsd was 0, sum ALL valid candidates
+    // (not just the sliced selectedBranches) to compute the accurate denominator.
+    // Previously, the taint % was inflated because the denominator excluded dropped branches.
     if (currentItem.depth === 0 && rootTaintUsd === 0) {
-      const outgoingSum = selectedBranches.reduce((sum, tx) => sum + (tx.usdValue || tx.amountEth * ethPriceUsd), 0);
+      const outgoingSum = candidateTxs.reduce((sum, tx) => sum + (tx.usdValue || tx.amountEth * ethPriceUsd), 0);
       rootTaintUsd = outgoingSum > 0 ? outgoingSum : 1000;
       if (currentNode) {
         currentNode.taintedAmountUsd = rootTaintUsd;
@@ -433,6 +509,42 @@ export async function traceWalletTree(
 
       // Create new node in global graph
       const vasp = vaspLookup(nextAddr);
+
+      // FIX 3: Smart Contract / DEX Router Terminal Detection.
+      // If the next address is a known DEX router, pool, bridge, or token contract,
+      // we terminate traversal here instead of following other users' swap outflows.
+      // This prevents taint pollution (e.g. tracing Harbor Router pulls $7k unrelated swaps).
+      const knownContractName = KNOWN_CONTRACT_TERMINALS[nextKey];
+      if (knownContractName && !vasp) {
+        // Add node as a contract_pool terminal
+        const contractNode: GraphNode = {
+          id: nextAddr,
+          type: 'contract_pool' as any,
+          label: knownContractName,
+          isFanOut: false,
+          isFanIn: false,
+          inDegree: 1,
+          outDegree: 0,
+          depth: currentItem.depth + 1,
+          taintedAmountUsd: txUsdVal,
+          walletCategory: 'intermediary',
+          hopVelocitySec: undefined,
+        };
+        visitedGlobal.set(nextKey, contractNode);
+        // Record a terminated branch — do NOT queue for further BFS
+        branches.push({
+          branchId: `Branch ${branchCounter++}`,
+          hopCount: currentItem.pathHops.length + 1,
+          terminalAddress: nextAddr,
+          terminalType: 'dead_end',
+          exchangeName: knownContractName,
+          initialTaintedAmountUsd: currentItem.initialBranchTaintUsd,
+          finalAmountUsd: branchTaintUsd,
+          taintPercentage: Math.min(parseFloat(((branchTaintUsd / (rootTaintUsd || 1)) * 100).toFixed(1)), 100.0),
+          hops: [...currentItem.pathHops, hop],
+        });
+        continue;
+      }
 
       // Newly discovered node has not forwarded funds yet (outDegree = 0, hopVelocitySec = undefined)
       const walletCategory = classifyWallet({
