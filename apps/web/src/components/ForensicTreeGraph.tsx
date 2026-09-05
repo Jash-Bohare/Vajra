@@ -183,9 +183,9 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
       return {
         root: { stroke: '#dc2626', bg: '#fee2e2', text: '#991b1b', label: 'Suspect Origin', glow: 'rgba(220, 38, 38, 0.4)', roleStamp: 'SUSPECT ROOT', description: 'Inception wallet initiating fund dispersal or theft' },
         exchange: { stroke: '#059669', bg: '#d1fae5', text: '#065f46', label: 'VASP Exchange Exit', glow: 'rgba(5, 150, 105, 0.4)', roleStamp: 'VASP EXIT', description: 'Centralized exchange deposit endpoint (KYC / Subpoena actionable)' },
-        intermediary: { stroke: '#0284c7', bg: '#e0f2fe', text: '#075985', label: 'Peeling Intermediary', glow: 'rgba(2, 132, 199, 0.4)', roleStamp: 'PEELING RELAY', description: 'Intermediate relay wallet transferring peeling volume' },
-        aggregator: { stroke: '#7c3aed', bg: '#ede9fe', text: '#5b21b6', label: 'Mixer / Aggregator', glow: 'rgba(124, 58, 237, 0.4)', roleStamp: 'AGGREGATOR', description: 'Fan-in consolidation wallet aggregating multiple inflows' },
-        burner: { stroke: '#d97706', bg: '#fef3c7', text: '#92400e', label: 'Burner / Dust Leaf', glow: 'rgba(217, 119, 6, 0.4)', roleStamp: 'BURNER LEAF', description: 'Dead-end terminal wallet holding residual dust' },
+        intermediary: { stroke: '#0284c7', bg: '#e0f2fe', text: '#075985', label: 'Intermediary Relay', glow: 'rgba(2, 132, 199, 0.4)', roleStamp: 'PEELING RELAY', description: 'Intermediate relay wallet transferring peeling volume' },
+        aggregator: { stroke: '#7c3aed', bg: '#ede9fe', text: '#5b21b6', label: 'Fund Aggregator (Convergence)', glow: 'rgba(124, 58, 237, 0.4)', roleStamp: 'AGGREGATOR', description: 'Fan-in consolidation wallet receiving funds from 2+ separate tracked paths' },
+        burner: { stroke: '#d97706', bg: '#fef3c7', text: '#92400e', label: 'Holding / Terminal Leaf', glow: 'rgba(217, 119, 6, 0.4)', roleStamp: 'BURNER LEAF', description: 'Terminal destination holding unspent funds' },
         terminal: { stroke: '#059669', bg: '#d1fae5', text: '#065f46', label: 'VASP Exchange Exit', glow: 'rgba(5, 150, 105, 0.4)', roleStamp: 'VASP EXIT', description: 'Centralized exchange deposit endpoint' },
         contract_pool: { stroke: '#ea580c', bg: '#fff7ed', text: '#9a3412', label: 'DEX / Smart Contract', glow: 'rgba(234, 88, 12, 0.4)', roleStamp: 'CONTRACT POOL', description: 'Public DEX router or smart contract — trace terminated to avoid unrelated swap pollution' },
       };
@@ -193,9 +193,9 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
     return {
       root: { stroke: '#ef4444', bg: '#3a0d0d', text: '#fca5a5', label: 'Suspect Origin', glow: 'rgba(239, 68, 68, 0.85)', roleStamp: 'SUSPECT ROOT', description: 'Inception wallet initiating fund dispersal or theft' },
       exchange: { stroke: '#10b981', bg: '#042f1f', text: '#6ee7b7', label: 'VASP Exchange Exit', glow: 'rgba(16, 185, 129, 0.85)', roleStamp: 'VASP EXIT', description: 'Centralized exchange deposit endpoint (KYC / Subpoena actionable)' },
-      intermediary: { stroke: '#00e5ff', bg: '#03253b', text: '#7dd3fc', label: 'Peeling Intermediary', glow: 'rgba(0, 229, 255, 0.8)', roleStamp: 'PEELING RELAY', description: 'Intermediate relay wallet transferring peeling volume' },
-      aggregator: { stroke: '#c084fc', bg: '#2e1065', text: '#e9d5ff', label: 'Mixer / Aggregator', glow: 'rgba(192, 132, 252, 0.85)', roleStamp: 'AGGREGATOR', description: 'Fan-in consolidation wallet aggregating multiple inflows' },
-      burner: { stroke: '#f59e0b', bg: '#451a03', text: '#fcd34d', label: 'Burner / Dust Leaf', glow: 'rgba(245, 158, 11, 0.85)', roleStamp: 'BURNER LEAF', description: 'Dead-end terminal wallet holding residual dust' },
+      intermediary: { stroke: '#00e5ff', bg: '#03253b', text: '#7dd3fc', label: 'Intermediary Relay', glow: 'rgba(0, 229, 255, 0.8)', roleStamp: 'PEELING RELAY', description: 'Intermediate relay wallet transferring peeling volume' },
+      aggregator: { stroke: '#c084fc', bg: '#2e1065', text: '#e9d5ff', label: 'Fund Aggregator (Convergence)', glow: 'rgba(192, 132, 252, 0.85)', roleStamp: 'AGGREGATOR', description: 'Fan-in consolidation wallet receiving funds from 2+ separate tracked paths' },
+      burner: { stroke: '#f59e0b', bg: '#451a03', text: '#fcd34d', label: 'Holding / Terminal Leaf', glow: 'rgba(245, 158, 11, 0.85)', roleStamp: 'BURNER LEAF', description: 'Terminal destination holding unspent funds' },
       terminal: { stroke: '#10b981', bg: '#042f1f', text: '#6ee7b7', label: 'VASP Exchange Exit', glow: 'rgba(16, 185, 129, 0.85)', roleStamp: 'VASP EXIT', description: 'Centralized exchange deposit endpoint' },
       contract_pool: { stroke: '#f97316', bg: '#1c0d00', text: '#fdba74', label: 'DEX / Smart Contract', glow: 'rgba(249, 115, 22, 0.85)', roleStamp: 'CONTRACT POOL', description: 'Public DEX router or smart contract — trace terminated to avoid unrelated swap pollution' },
     };
@@ -375,39 +375,93 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
         nodeMap.set(addr, nodeObj);
       });
 
-      // Populate edges with clean compact amount labels
-      rawEdges.forEach((re, idx) => {
-        const fromAddr = re.from.toLowerCase();
-        const toAddr = re.to.toLowerCase();
-        const symbol = re.tokenSymbol || targetAsset;
+      // Consolidate parallel edges between the exact same (from, to) pair
+      // to eliminate overlapping duplicate lines and stacked label boxes
+      const consolidatedEdgeMap = new Map<string, {
+        from: string;
+        to: string;
+        totalEth: number;
+        totalTokenAmount: number;
+        tokenSymbol?: string;
+        totalUsd: number;
+        maxTaintPercent?: number;
+        txHashes: string[];
+        timestamps: string[];
+        txCount: number;
+      }>();
 
+      rawEdges.forEach((re) => {
+        const fromAddr = (re.from || '').toLowerCase();
+        const toAddr = (re.to || '').toLowerCase();
+        if (!fromAddr || !toAddr) return;
+
+        const pairKey = `${fromAddr}->${toAddr}`;
         const anyRe = re as any;
+        const ethVal = typeof re.amountEth === 'number' ? re.amountEth : 0;
+        const tokenVal = typeof anyRe.tokenAmount === 'number' ? anyRe.tokenAmount : 0;
+        const usdVal = typeof re.usdValue === 'number' ? re.usdValue : 0;
+        const taintVal = re.taintPercentage !== undefined ? Math.round(re.taintPercentage * 10) / 10 : undefined;
+        const sym = re.tokenSymbol || targetAsset;
+
+        if (!consolidatedEdgeMap.has(pairKey)) {
+          consolidatedEdgeMap.set(pairKey, {
+            from: fromAddr,
+            to: toAddr,
+            totalEth: ethVal,
+            totalTokenAmount: tokenVal,
+            tokenSymbol: sym,
+            totalUsd: usdVal,
+            maxTaintPercent: taintVal,
+            txHashes: re.txHash ? [re.txHash] : [],
+            timestamps: re.timestamp ? [re.timestamp] : [],
+            txCount: 1,
+          });
+        } else {
+          const item = consolidatedEdgeMap.get(pairKey)!;
+          item.totalEth += ethVal;
+          item.totalTokenAmount += tokenVal;
+          item.totalUsd += usdVal;
+          if (taintVal !== undefined) {
+            item.maxTaintPercent = Math.max(item.maxTaintPercent || 0, taintVal);
+          }
+          if (re.txHash && !item.txHashes.includes(re.txHash)) {
+            item.txHashes.push(re.txHash);
+          }
+          if (re.timestamp) {
+            item.timestamps.push(re.timestamp);
+          }
+          item.txCount += 1;
+        }
+      });
+
+      consolidatedEdgeMap.forEach((ce) => {
         let amountText = '';
-        if (anyRe.tokenAmount !== undefined && anyRe.tokenAmount > 0) {
-          amountText = `${anyRe.tokenAmount.toFixed(4)} ${symbol}`;
-        } else if (re.amountEth !== undefined && re.amountEth > 0) {
-          amountText = `${re.amountEth.toFixed(4)} ETH`;
-        } else if (re.usdValue) {
-          amountText = `$${Math.round(re.usdValue).toLocaleString()}`;
+        const symbol = ce.tokenSymbol || 'ETH';
+        if (ce.totalTokenAmount > 0) {
+          amountText = `${ce.totalTokenAmount.toFixed(4)} ${symbol}`;
+        } else if (ce.totalEth > 0) {
+          amountText = `${ce.totalEth.toFixed(4)} ETH`;
+        } else if (ce.totalUsd > 0) {
+          amountText = `$${Math.round(ce.totalUsd).toLocaleString()}`;
         } else {
           amountText = `Transfer`;
         }
 
-        const taintVal = re.taintPercentage !== undefined
-          ? Math.round(re.taintPercentage * 10) / 10
-          : undefined;
+        if (ce.txCount > 1) {
+          amountText = `${amountText} (${ce.txCount} txs)`;
+        }
 
         edgeList.push({
-          id: `edge_${fromAddr}_${toAddr}_${idx}`,
-          from: fromAddr,
-          to: toAddr,
+          id: `edge_${ce.from}_${ce.to}`,
+          from: ce.from,
+          to: ce.to,
           amount: amountText,
-          usdValue: re.usdValue,
-          taintText: taintVal !== undefined ? `${taintVal}%` : undefined,
-          taintPercent: taintVal,
-          txHash: re.txHash,
+          usdValue: ce.totalUsd,
+          taintText: ce.maxTaintPercent !== undefined ? `${ce.maxTaintPercent}%` : undefined,
+          taintPercent: ce.maxTaintPercent,
+          txHash: ce.txHashes[0],
           tokenSymbol: symbol,
-          timestamp: re.timestamp,
+          timestamp: ce.timestamps[0],
         });
       });
 
@@ -452,10 +506,69 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
 
       nodeMap.forEach((node) => {
         const key = node.id.toLowerCase();
-        node.inDegree = actualInDegreeMap.get(key) || 0;
-        node.outDegree = actualOutDegreeMap.get(key) || 0;
-        node.isFanIn = node.inDegree >= 2;
-        node.isFanOut = node.outDegree >= 2;
+        const isRoot = key === targetRoot;
+        const actualIn = actualInDegreeMap.get(key) || 0;
+        const actualOut = actualOutDegreeMap.get(key) || 0;
+
+        node.inDegree = actualIn;
+        node.outDegree = actualOut;
+        node.isFanIn = actualIn >= 2;
+        node.isFanOut = actualOut >= 2;
+
+        // Re-classify role and transit delay strictly based on actual visible on-canvas graph edges
+        const inTime = inboundTimeMap.get(key);
+        const outTime = outboundTimeMap.get(key);
+        const rootOutTime = outboundTimeMap.get(targetRoot);
+
+        if (isRoot) {
+          node.nodeType = 'root';
+          node.shortCode = 'ROOT';
+          node.roleStamp = 'SUSPECT ROOT';
+          node.categoryLabel = 'Suspect Origin';
+          node.transitDelayText = 'Inception Source (Initial Fund Outflow)';
+        } else if ((node.nodeType as string) === 'contract_pool' || (node as any).type === 'contract_pool') {
+          node.nodeType = 'contract_pool' as any;
+          node.shortCode = 'DEX';
+          node.roleStamp = 'CONTRACT POOL';
+          node.categoryLabel = 'DEX / Smart Contract';
+          node.transitDelayText = 'DEX / Smart Contract Pool (Trace terminated at public contract)';
+        } else if (node.exchangeName || node.nodeType === 'exchange' || node.nodeType === 'terminal') {
+          node.nodeType = 'exchange';
+          node.shortCode = 'VASP';
+          node.roleStamp = node.exchangeName ? node.exchangeName.toUpperCase() : 'VASP EXIT';
+          node.categoryLabel = node.exchangeName || 'VASP Exchange Exit';
+          if (inTime && rootOutTime && inTime >= rootOutTime) {
+            node.transitDelayText = `Deposited into VASP in ${formatTransitDuration((inTime - rootOutTime) / 1000)} from inception`;
+          } else {
+            node.transitDelayText = 'Deposited into VASP Exchange endpoint';
+          }
+        } else if (actualIn >= 2) {
+          node.nodeType = 'aggregator';
+          node.shortCode = 'AGG';
+          node.roleStamp = 'AGGREGATOR';
+          node.categoryLabel = 'Fund Aggregator (Convergence)';
+          if (actualOut > 0 && inTime && outTime && outTime >= inTime) {
+            node.transitDelayText = `Forwarded in ${formatTransitDuration((outTime - inTime) / 1000)} after receiving funds`;
+          } else {
+            node.transitDelayText = 'Fund Consolidation (Convergence Point — No further outflows)';
+          }
+        } else if (actualOut === 0) {
+          node.nodeType = 'burner';
+          node.shortCode = 'LEAF';
+          node.roleStamp = 'BURNER LEAF';
+          node.categoryLabel = 'Holding / Terminal Leaf';
+          node.transitDelayText = 'Holding Funds (Terminal node / No further outflows tracked)';
+        } else {
+          node.nodeType = 'intermediary';
+          node.shortCode = `H${Math.max(1, node.hopDepth)}`;
+          node.roleStamp = 'PEELING RELAY';
+          node.categoryLabel = 'Intermediary Relay';
+          if (inTime && outTime && outTime >= inTime) {
+            node.transitDelayText = `Forwarded in ${formatTransitDuration((outTime - inTime) / 1000)} after receiving funds`;
+          } else {
+            node.transitDelayText = 'Forwarded downstream in laundering path';
+          }
+        }
       });
 
       return { nodes: Array.from(nodeMap.values()), edges: edgeList };
@@ -637,41 +750,147 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           formattedTimestamp,
         });
       }
+    });
 
+    // Consolidate hops between the exact same (from, to) pair in Case B
+    const consolidatedHopMap = new Map<string, {
+      from: string;
+      to: string;
+      totalUsd: number;
+      tokenSymbol?: string;
+      formattedVol: string;
+      taint: number;
+      txHash?: string;
+      timestamp?: string;
+      txCount: number;
+    }>();
+
+    hops.forEach((h, idx) => {
+      const from = (h.fromAddress || '').toLowerCase();
+      const to = (h.toAddress || '').toLowerCase();
+      if (!from || !to) return;
+      const pairKey = `${from}->${to}`;
+
+      const symbol = h.tokenSymbol || targetAsset;
+      const tokenAmt = h.tokenAmount !== undefined ? h.tokenAmount : h.amountEth || 0;
+      const formattedVol = tokenAmt > 0 ? `${tokenAmt.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symbol}` : `$${Math.round(h.usdValue || 0).toLocaleString()}`;
+      const taint = h.taintPercentage !== undefined ? h.taintPercentage : Math.max(5, 100 - idx * 15);
+
+      if (!consolidatedHopMap.has(pairKey)) {
+        consolidatedHopMap.set(pairKey, {
+          from,
+          to,
+          totalUsd: h.usdValue || 0,
+          tokenSymbol: symbol,
+          formattedVol,
+          taint,
+          txHash: h.txHash,
+          timestamp: h.txTimestamp,
+          txCount: 1,
+        });
+      } else {
+        const item = consolidatedHopMap.get(pairKey)!;
+        item.totalUsd += (h.usdValue || 0);
+        item.txCount += 1;
+        item.taint = Math.max(item.taint, taint);
+      }
+    });
+
+    consolidatedHopMap.forEach((ch) => {
+      const volText = ch.txCount > 1 ? `${ch.formattedVol} (${ch.txCount} txs)` : ch.formattedVol;
       edgeList.push({
-        id: `hop_edge_${idx}_${from}_${to}`,
-        from,
-        to,
-        amount: formattedVol,
-        usdValue: h.usdValue,
-        taintText: `${taint.toFixed(1)}%`,
-        taintPercent: taint,
-        txHash: h.txHash,
-        tokenSymbol: symbol,
-        timestamp: h.txTimestamp,
+        id: `hop_edge_${ch.from}_${ch.to}`,
+        from: ch.from,
+        to: ch.to,
+        amount: volText,
+        usdValue: ch.totalUsd,
+        taintText: `${ch.taint.toFixed(1)}%`,
+        taintPercent: ch.taint,
+        txHash: ch.txHash,
+        tokenSymbol: ch.tokenSymbol,
+        timestamp: ch.timestamp,
       });
     });
 
     // Exact synchronization: compute in/out degrees directly from verified edgeList
-      const actualInDegreeMap = new Map<string, number>();
-      const actualOutDegreeMap = new Map<string, number>();
-      edgeList.forEach((e) => {
-        const from = (e.from || '').toLowerCase();
-        const to = (e.to || '').toLowerCase();
-        if (from) actualOutDegreeMap.set(from, (actualOutDegreeMap.get(from) || 0) + 1);
-        if (to) actualInDegreeMap.set(to, (actualInDegreeMap.get(to) || 0) + 1);
-      });
+    const actualInDegreeMap = new Map<string, number>();
+    const actualOutDegreeMap = new Map<string, number>();
+    edgeList.forEach((e) => {
+      const from = (e.from || '').toLowerCase();
+      const to = (e.to || '').toLowerCase();
+      if (from) actualOutDegreeMap.set(from, (actualOutDegreeMap.get(from) || 0) + 1);
+      if (to) actualInDegreeMap.set(to, (actualInDegreeMap.get(to) || 0) + 1);
+    });
 
-      nodeMap.forEach((node) => {
-        const key = node.id.toLowerCase();
-        node.inDegree = actualInDegreeMap.get(key) || 0;
-        node.outDegree = actualOutDegreeMap.get(key) || 0;
-        node.isFanIn = node.inDegree >= 2;
-        node.isFanOut = node.outDegree >= 2;
-      });
+    nodeMap.forEach((node) => {
+      const key = node.id.toLowerCase();
+      const isRoot = key === targetRoot;
+      const actualIn = actualInDegreeMap.get(key) || 0;
+      const actualOut = actualOutDegreeMap.get(key) || 0;
 
-      return { nodes: Array.from(nodeMap.values()), edges: edgeList };
-    }, [tree, graph, hops, rootAddress, terminalExchange, terminalType, targetAsset, CATEGORY_COLORS]);
+      node.inDegree = actualIn;
+      node.outDegree = actualOut;
+      node.isFanIn = actualIn >= 2;
+      node.isFanOut = actualOut >= 2;
+
+      // Re-classify role and transit delay strictly based on actual visible on-canvas graph edges
+      const inTime = inboundTimeMap.get(key);
+      const outTime = outboundTimeMap.get(key);
+      const rootOutTime = outboundTimeMap.get(targetRoot);
+
+      if (isRoot) {
+        node.nodeType = 'root';
+        node.shortCode = 'ROOT';
+        node.roleStamp = 'SUSPECT ROOT';
+        node.categoryLabel = 'Suspect Origin';
+        node.transitDelayText = 'Inception Source (Initial Fund Outflow)';
+      } else if ((node.nodeType as string) === 'contract_pool' || (node as any).type === 'contract_pool') {
+        node.nodeType = 'contract_pool' as any;
+        node.shortCode = 'DEX';
+        node.roleStamp = 'CONTRACT POOL';
+        node.categoryLabel = 'DEX / Smart Contract';
+        node.transitDelayText = 'DEX / Smart Contract Pool (Trace terminated at public contract)';
+      } else if (node.exchangeName || node.nodeType === 'exchange' || node.nodeType === 'terminal') {
+        node.nodeType = 'exchange';
+        node.shortCode = 'VASP';
+        node.roleStamp = node.exchangeName ? node.exchangeName.toUpperCase() : 'VASP EXIT';
+        node.categoryLabel = node.exchangeName || 'VASP Exchange Exit';
+        if (inTime && rootOutTime && inTime >= rootOutTime) {
+          node.transitDelayText = `Deposited into VASP in ${formatTransitDuration((inTime - rootOutTime) / 1000)} from inception`;
+        } else {
+          node.transitDelayText = 'Deposited into VASP Exchange endpoint';
+        }
+      } else if (actualIn >= 2) {
+        node.nodeType = 'aggregator';
+        node.shortCode = 'AGG';
+        node.roleStamp = 'AGGREGATOR';
+        node.categoryLabel = 'Fund Aggregator (Convergence)';
+        if (actualOut > 0 && inTime && outTime && outTime >= inTime) {
+          node.transitDelayText = `Forwarded in ${formatTransitDuration((outTime - inTime) / 1000)} after receiving funds`;
+        } else {
+          node.transitDelayText = 'Fund Consolidation (Convergence Point — No further outflows)';
+        }
+      } else if (actualOut === 0) {
+        node.nodeType = 'burner';
+        node.shortCode = 'LEAF';
+        node.roleStamp = 'BURNER LEAF';
+        node.categoryLabel = 'Holding / Terminal Leaf';
+        node.transitDelayText = 'Holding Funds (Terminal node / No further outflows tracked)';
+      } else {
+        node.nodeType = 'intermediary';
+        node.shortCode = `H${Math.max(1, node.hopDepth)}`;
+        node.roleStamp = 'PEELING RELAY';
+        node.categoryLabel = 'Intermediary Relay';
+        if (inTime && outTime && outTime >= inTime) {
+          node.transitDelayText = `Forwarded in ${formatTransitDuration((outTime - inTime) / 1000)} after receiving funds`;
+        } else {
+          node.transitDelayText = 'Forwarded downstream in laundering path';
+        }
+      }
+    });
+
+    return { nodes: Array.from(nodeMap.values()), edges: edgeList };
+  }, [tree, graph, hops, rootAddress, terminalExchange, terminalType, targetAsset, CATEGORY_COLORS]);
 
   // Active Focused Branch Node & Edge IDs
   const focusedNodeAddresses = useMemo(() => {
@@ -1098,10 +1317,59 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
     };
   }, [isDragging, zoom, dragStart, pan]);
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomDelta = e.deltaY > 0 ? -0.06 : 0.06;
-    setZoom((prev) => Math.min(2.2, Math.max(0.35, prev + zoomDelta)));
+  // 6. Cursor-Centered Canvas Zoom with Native Non-Passive Wheel Listener
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleNativeWheel = (e: WheelEvent) => {
+      // Prevent entire browser window / site from zooming or scrolling
+      e.preventDefault();
+      e.stopPropagation();
+
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      // Exponential zoom step factor
+      const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
+
+      setZoom((prevZoom) => {
+        const nextZoom = Math.min(2.5, Math.max(0.35, prevZoom * zoomFactor));
+        if (Math.abs(nextZoom - prevZoom) < 0.001) return prevZoom;
+
+        // Keep the exact point under mouse cursor fixed in viewport
+        setPan((prevPan) => ({
+          x: mouseX - (mouseX - prevPan.x) * (nextZoom / prevZoom),
+          y: mouseY - (mouseY - prevPan.y) * (nextZoom / prevZoom),
+        }));
+
+        return nextZoom;
+      });
+    };
+
+    container.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, []);
+
+  const handleStepZoom = (factor: number) => {
+    const container = containerRef.current;
+    const centerX = (container?.clientWidth || 700) / 2;
+    const centerY = (container?.clientHeight || 460) / 2;
+
+    setZoom((prevZoom) => {
+      const nextZoom = Math.min(2.5, Math.max(0.35, prevZoom * factor));
+      if (Math.abs(nextZoom - prevZoom) < 0.001) return prevZoom;
+
+      setPan((prevPan) => ({
+        x: centerX - (centerX - prevPan.x) * (nextZoom / prevZoom),
+        y: centerY - (centerY - prevPan.y) * (nextZoom / prevZoom),
+      }));
+
+      return nextZoom;
+    });
   };
 
   const copyAddress = (addr: string) => {
@@ -1117,9 +1385,9 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
   const ROLE_MATRIX_ITEMS = useMemo(() => [
     { key: 'root', name: 'Suspect Origin', symbol: 'ROOT', color: CATEGORY_COLORS.root.stroke, bg: CATEGORY_COLORS.root.bg },
     { key: 'exchange', name: 'VASP Exchange Exit', symbol: 'VASP', color: CATEGORY_COLORS.exchange.stroke, bg: CATEGORY_COLORS.exchange.bg },
-    { key: 'intermediary', name: 'Peeling Intermediary', symbol: 'H1 / H2', color: CATEGORY_COLORS.intermediary.stroke, bg: CATEGORY_COLORS.intermediary.bg },
-    { key: 'aggregator', name: 'Mixer / Aggregator', symbol: 'AGG', color: CATEGORY_COLORS.aggregator.stroke, bg: CATEGORY_COLORS.aggregator.bg },
-    { key: 'burner', name: 'Burner / Dust Leaf', symbol: 'LEAF', color: CATEGORY_COLORS.burner.stroke, bg: CATEGORY_COLORS.burner.bg },
+    { key: 'intermediary', name: 'Intermediary Relay', symbol: 'H1 / H2', color: CATEGORY_COLORS.intermediary.stroke, bg: CATEGORY_COLORS.intermediary.bg },
+    { key: 'aggregator', name: 'Fund Aggregator', symbol: 'AGG', color: CATEGORY_COLORS.aggregator.stroke, bg: CATEGORY_COLORS.aggregator.bg },
+    { key: 'burner', name: 'Holding / Terminal Leaf', symbol: 'LEAF', color: CATEGORY_COLORS.burner.stroke, bg: CATEGORY_COLORS.burner.bg },
     { key: 'contract_pool', name: 'DEX / Smart Contract', symbol: 'POOL', color: CATEGORY_COLORS.contract_pool.stroke, bg: CATEGORY_COLORS.contract_pool.bg },
   ], [CATEGORY_COLORS]);
 
@@ -1139,7 +1407,6 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
       }}
       onMouseDown={handleCanvasMouseDown}
       onClick={handleCanvasClick}
-      onWheel={handleWheel}
     >
       {/* 1. Top-Left Node Role Matrix Button & Floating Legend HUD */}
       <div
@@ -1388,6 +1655,69 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           >
             <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>account_tree</span>
             <span>Tree View</span>
+          </button>
+        </div>
+
+        {/* Zoom In & Out Step Controls */}
+        <div
+          style={{
+            display: 'inline-flex',
+            backgroundColor: isLight ? '#ffffff' : '#0a1220',
+            border: '1px solid var(--border-tactical)',
+            borderRadius: '4px',
+            padding: '2px',
+            alignItems: 'center',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => handleStepZoom(0.85)}
+            title="Zoom Out"
+            style={{
+              padding: '4px 6px',
+              backgroundColor: 'transparent',
+              color: 'var(--text-main)',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'background-color 0.15s ease',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>remove</span>
+          </button>
+          <span
+            style={{
+              fontSize: '10.5px',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 700,
+              color: 'var(--text-dim)',
+              padding: '0 4px',
+              minWidth: '34px',
+              textAlign: 'center',
+              userSelect: 'none',
+            }}
+          >
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => handleStepZoom(1.18)}
+            title="Zoom In"
+            style={{
+              padding: '4px 6px',
+              backgroundColor: 'transparent',
+              color: 'var(--text-main)',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'background-color 0.15s ease',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>add</span>
           </button>
         </div>
 

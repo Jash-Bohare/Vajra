@@ -58,13 +58,13 @@ export function classifyWallet(inputs: WalletClassificationInputs): WalletCatego
 }
 
 export const TREE_TRACER_CONFIG = {
-  MAX_DEPTH: 4,              // reduced from 5: 4 hops covers all real-world laundering chains
+  MAX_DEPTH: 5,              // Trace up to 5 full hops
   MAX_BRANCHES_PER_NODE: 5, // sort by USD desc so top-5 largest flows are captured
-  MAX_TOTAL_NODES: 15,       // reduced from 25: limits API calls while still giving full picture
+  MAX_TOTAL_NODES: 30,       // Allows full multi-hop 5-depth exploration without premature cutoff
   SPLIT_THRESHOLD_PERCENT: 10,
   MIN_USD_VALUE_THRESHOLD: 5,
   MIN_ETH_VALUE_THRESHOLD: 0.0001,
-  RATE_LIMIT_DELAY_MS: 0,    // removed: global Etherscan queue already enforces rate limits
+  RATE_LIMIT_DELAY_MS: 0,    // global Etherscan queue enforces rate limits
   TAINT_TOLERANCE_LOWER: 0.70,
   TAINT_TOLERANCE_UPPER: 1.05,
 } as const;
@@ -599,6 +599,16 @@ export async function traceWalletTree(
     node.outDegree = outDegMap.get(key) || 0;
     node.isFanIn = node.inDegree >= 2;
     node.isFanOut = node.outDegree >= 2;
+
+    if (node.type !== 'root' && node.type !== 'exchange' && (node as any).type !== 'contract_pool') {
+      node.walletCategory = classifyWallet({
+        isRoot: false,
+        isExchange: false,
+        inDegree: node.inDegree,
+        outDegree: node.outDegree,
+        hopVelocitySec: node.hopVelocitySec,
+      });
+    }
   });
 
   // Calculate Aggregated Metrics
