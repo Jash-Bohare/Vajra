@@ -160,14 +160,40 @@ export function exportInvestigationPdf(data: any) {
   const rootHop = hops[0];
   const rootAmount = rootHop ? (rootHop.tokenAmount || rootHop.amountEth || parseFloat(rootHop.value) || 0) : 0;
   const totalLossUsd = data.victimAmountUsd || tree?.victimAmountUsd || rootHop?.usdValue || (rootAmount > 0 ? Math.round(rootAmount * (targetAsset === 'ETH' ? ethRate : 1)) : 0);
-  const finalHop = hops.length > 0 ? hops[hops.length - 1] : null;
-  const retainedTaintVal = finalHop?.taintPercentage !== undefined
-    ? Number(finalHop.taintPercentage)
-    : (tree?.taintCoveragePercent !== undefined ? Number(tree.taintCoveragePercent) : (hops.length > 0 ? Math.max(5, 100 - (hops.length - 1) * 8.5) : 100));
+  // Accurate VASP / Total Valuation & Taint Resolution
+  let retainedTaintVal = 100;
+  let trappedValuationUsd = totalLossUsd;
+
+  if (isExchange) {
+    const branches: any[] = tree?.branches || [];
+    const exBranch = branches.find((b: any) => b.terminalType === 'exchange' || Boolean(b.exchangeName));
+    const allNodes: any[] = tree?.nodes || data.graph?.nodes || [];
+    const exNode = allNodes.find((n: any) => n.type === 'exchange' || n.walletCategory === 'exchange');
+
+    let vaspTaint = 0;
+    let vaspUsd = 0;
+
+    if (exBranch) {
+      vaspTaint = exBranch.taintPercentage || 0;
+      vaspUsd = exBranch.finalAmountUsd || (totalLossUsd > 0 ? (totalLossUsd * (vaspTaint / 100)) : 0);
+    } else if (exNode) {
+      vaspUsd = exNode.taintedAmountUsd || exNode.totalReceivedUsd || 0;
+      vaspTaint = exNode.taintPercentage || (totalLossUsd > 0 ? (vaspUsd / totalLossUsd) * 100 : 0);
+    }
+
+    if (vaspTaint === 0 && totalLossUsd > 0 && vaspUsd > 0) {
+      vaspTaint = (vaspUsd / totalLossUsd) * 100;
+    }
+
+    if (vaspTaint > 0 || vaspUsd > 0) {
+      retainedTaintVal = Math.round(vaspTaint * 10) / 10;
+      trappedValuationUsd = Math.round(vaspUsd * 100) / 100;
+    }
+  } else if (tree?.taintCoveragePercent !== undefined) {
+    retainedTaintVal = Number(tree.taintCoveragePercent);
+  }
+
   const retainedTaintText = `${retainedTaintVal.toFixed(1)}%`;
-  const trappedValuationUsd = isExchange && totalLossUsd > 0
-    ? Math.round(totalLossUsd * (retainedTaintVal / 100))
-    : totalLossUsd;
 
   // -------------------------------------------------------------
   // 1. TOP HEADER & OFFICIAL CLASSIFICATION BANNER

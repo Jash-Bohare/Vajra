@@ -100,18 +100,76 @@ export const AttributionTerminal: React.FC = () => {
     return map;
   }, [data]);
 
-  const finalHop = rawHops.length > 0 ? rawHops[rawHops.length - 1] : null;
-  const finalHopFrom = (finalHop?.fromAddress || '').toLowerCase();
-  const finalHopTo = (finalHop?.toAddress || '').toLowerCase();
-  const finalHopTaint = finalHop?.taintPercentage
-    ?? edgeTaintMap.get(`${finalHopFrom}_${finalHopTo}`)
-    ?? (finalHop?.usdValue && totalLossUsd > 0 ? (finalHop.usdValue / totalLossUsd) * 100 : undefined)
-    ?? (rawHops.length > 0 ? Math.max(5, 100 - (rawHops.length - 1) * 8.5) : 100);
-  const retainedTaint = `${Number(finalHopTaint).toFixed(1)}%`;
+  // Accurate Target / Selected / Overall Taint and Valuation Resolution
+  const valuationMetrics = useMemo(() => {
+    // 1. If a specific node is selected by investigator in the visualizer graph
+    if (selectedNodeId) {
+      const allNodes: any[] = data?.tree?.nodes || data?.graph?.nodes || [];
+      const node = allNodes.find((n: any) => (n.id || '').toLowerCase() === selectedNodeId.toLowerCase());
+      if (node) {
+        const taint = node.taintPercentage !== undefined
+          ? Number(node.taintPercentage)
+          : (totalLossUsd > 0 && node.taintedAmountUsd ? (node.taintedAmountUsd / totalLossUsd) * 100 : 100);
+        const val = node.taintedAmountUsd || (totalLossUsd > 0 ? (totalLossUsd * (taint / 100)) : 0);
+        return {
+          taintPercent: Math.round(taint * 10) / 10,
+          valuationUsd: val > 0 ? val : (totalLossUsd * (taint / 100)),
+          taintHeader: 'Selected Node Taint',
+          valuationHeader: 'Node Tracked Value',
+          taintSubtext: `Node: ${(node.label || node.id).substring(0, 18)}`,
+          taintSuffix: 'Node Taint',
+        };
+      }
+    }
 
-  const trappedValuationUsd = isExchange && totalLossUsd > 0
-    ? Math.round(totalLossUsd * (parseFloat(retainedTaint) / 100))
-    : totalLossUsd;
+    // 2. If a Target VASP Exchange is identified (e.g. BingX)
+    if (isExchange) {
+      const branches: any[] = data?.tree?.branches || [];
+      const exBranch = branches.find((b: any) => b.terminalType === 'exchange' || Boolean(b.exchangeName));
+      const allNodes: any[] = data?.tree?.nodes || data?.graph?.nodes || [];
+      const exNode = allNodes.find((n: any) => n.type === 'exchange' || n.walletCategory === 'exchange');
+      
+      let vaspTaint = 0;
+      let vaspUsd = 0;
+
+      if (exBranch) {
+        vaspTaint = exBranch.taintPercentage || 0;
+        vaspUsd = exBranch.finalAmountUsd || (totalLossUsd > 0 ? (totalLossUsd * (vaspTaint / 100)) : 0);
+      } else if (exNode) {
+        vaspUsd = exNode.taintedAmountUsd || exNode.totalReceivedUsd || 0;
+        vaspTaint = exNode.taintPercentage || (totalLossUsd > 0 ? (vaspUsd / totalLossUsd) * 100 : 0);
+      }
+
+      if (vaspTaint === 0 && totalLossUsd > 0 && vaspUsd > 0) {
+        vaspTaint = (vaspUsd / totalLossUsd) * 100;
+      }
+
+      if (vaspTaint > 0 || vaspUsd > 0) {
+        return {
+          taintPercent: Math.round(vaspTaint * 10) / 10,
+          valuationUsd: Math.round(vaspUsd * 100) / 100,
+          taintHeader: 'Target VASP Taint',
+          valuationHeader: 'VASP Trapped Value',
+          taintSubtext: `${rawHops.length} Traced Hop(s) Discovered`,
+          taintSuffix: 'VASP Taint',
+        };
+      }
+    }
+
+    // 3. Overall Inception / Tracked summary across all branches
+    return {
+      taintPercent: 100,
+      valuationUsd: totalLossUsd,
+      taintHeader: 'Retained Taint Share',
+      valuationHeader: 'Tracked Valuation (USD)',
+      taintSubtext: `${rawHops.length} Traced Hop(s) Discovered`,
+      taintSuffix: 'Residual Taint',
+    };
+  }, [selectedNodeId, data, isExchange, totalLossUsd, rawHops.length]);
+
+  const retainedTaint = `${valuationMetrics.taintPercent.toFixed(1)}%`;
+  const trappedValuationUsd = valuationMetrics.valuationUsd;
+  const finalHop = rawHops.length > 0 ? rawHops[rawHops.length - 1] : null;
 
   const riskScore = data?.riskScore || (data?.riskLevel === 'high' ? 94 : data?.riskLevel === 'medium' ? 58 : 22);
   const riskLevel = data?.riskLevel || (riskScore >= 80 ? 'high' : riskScore >= 50 ? 'medium' : 'low');
@@ -458,7 +516,7 @@ export const AttributionTerminal: React.FC = () => {
           </span>
         </div>
 
-        {/* Metric 3: Retained Taint Share */}
+        {/* Metric 3: Retained / Target Taint Share */}
         <div
           style={{
             backgroundColor: 'var(--bg-surface)',
@@ -472,13 +530,13 @@ export const AttributionTerminal: React.FC = () => {
           }}
         >
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Retained Taint Share
+            {valuationMetrics.taintHeader}
           </span>
           <span style={{ fontFamily: 'var(--font-headline)', fontSize: '18px', fontWeight: 800, color: 'var(--accent-cyan)' }}>
-            {retainedTaint} Residual Taint
+            {retainedTaint} {valuationMetrics.taintSuffix}
           </span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
-            {rawHops.length} Traced Hop(s) Discovered
+            {valuationMetrics.taintSubtext}
           </span>
         </div>
 
@@ -496,13 +554,13 @@ export const AttributionTerminal: React.FC = () => {
           }}
         >
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Tracked Valuation (USD)
+            {valuationMetrics.valuationHeader}
           </span>
           <span style={{ fontFamily: 'var(--font-headline)', fontSize: '18px', fontWeight: 800, color: 'var(--text-main)' }}>
             ${trappedValuationUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)' }}>
-            Oracle: ${ethRate.toLocaleString()} / ETH
+            Oracle: ${ethRate.toLocaleString()} / ETH {isExchange && totalLossUsd > trappedValuationUsd ? `• Inception: $${totalLossUsd.toLocaleString()}` : ''}
           </span>
         </div>
       </div>
