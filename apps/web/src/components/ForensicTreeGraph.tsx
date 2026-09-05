@@ -186,6 +186,7 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
         aggregator: { stroke: '#7c3aed', bg: '#ede9fe', text: '#5b21b6', label: 'Mixer / Aggregator', glow: 'rgba(124, 58, 237, 0.4)', roleStamp: 'AGGREGATOR', description: 'Fan-in consolidation wallet aggregating multiple inflows' },
         burner: { stroke: '#d97706', bg: '#fef3c7', text: '#92400e', label: 'Burner / Dust Leaf', glow: 'rgba(217, 119, 6, 0.4)', roleStamp: 'BURNER LEAF', description: 'Dead-end terminal wallet holding residual dust' },
         terminal: { stroke: '#059669', bg: '#d1fae5', text: '#065f46', label: 'VASP Exchange Exit', glow: 'rgba(5, 150, 105, 0.4)', roleStamp: 'VASP EXIT', description: 'Centralized exchange deposit endpoint' },
+        contract_pool: { stroke: '#ea580c', bg: '#fff7ed', text: '#9a3412', label: 'DEX / Smart Contract', glow: 'rgba(234, 88, 12, 0.4)', roleStamp: 'CONTRACT POOL', description: 'Public DEX router or smart contract — trace terminated to avoid unrelated swap pollution' },
       };
     }
     return {
@@ -195,6 +196,7 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
       aggregator: { stroke: '#c084fc', bg: '#2e1065', text: '#e9d5ff', label: 'Mixer / Aggregator', glow: 'rgba(192, 132, 252, 0.85)', roleStamp: 'AGGREGATOR', description: 'Fan-in consolidation wallet aggregating multiple inflows' },
       burner: { stroke: '#f59e0b', bg: '#451a03', text: '#fcd34d', label: 'Burner / Dust Leaf', glow: 'rgba(245, 158, 11, 0.85)', roleStamp: 'BURNER LEAF', description: 'Dead-end terminal wallet holding residual dust' },
       terminal: { stroke: '#10b981', bg: '#042f1f', text: '#6ee7b7', label: 'VASP Exchange Exit', glow: 'rgba(16, 185, 129, 0.85)', roleStamp: 'VASP EXIT', description: 'Centralized exchange deposit endpoint' },
+      contract_pool: { stroke: '#f97316', bg: '#1c0d00', text: '#fdba74', label: 'DEX / Smart Contract', glow: 'rgba(249, 115, 22, 0.85)', roleStamp: 'CONTRACT POOL', description: 'Public DEX router or smart contract — trace terminated to avoid unrelated swap pollution' },
     };
   }, [isLight]);
 
@@ -274,6 +276,11 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           category = 'root';
           shortCode = 'ROOT';
           roleStamp = 'SUSPECT ROOT';
+        } else if (rn.type === 'contract_pool') {
+          // FIX 3: DEX / Smart Contract Pool terminal — distinct orange node
+          category = 'contract_pool' as any;
+          shortCode = 'DEX';
+          roleStamp = 'CONTRACT POOL';
         } else if (isEx) {
           category = 'exchange';
           shortCode = 'VASP';
@@ -307,6 +314,8 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
 
         if (category === 'root') {
           transitDelayText = 'Inception Source (Initial Fund Theft & Outflow)';
+        } else if ((category as string) === 'contract_pool') {
+          transitDelayText = 'DEX / Smart Contract Pool — trace terminated (shared public contract, not a personal wallet)';
         } else if (category === 'exchange') {
           if (inTime && rootOutTime && inTime >= rootOutTime) {
             const diffSec = Math.max(0, (inTime - rootOutTime) / 1000);
@@ -324,6 +333,7 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
             transitDelayText = `Forwarded in ${formatTransitDuration(depth * 420 + 90)} after receiving`;
           }
         }
+
 
         let formattedTimestamp: string | undefined = undefined;
         const rawNodeTs = (rn as any).timestamp || (rn as any).txTimestamp;
