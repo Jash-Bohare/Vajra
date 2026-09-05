@@ -1466,7 +1466,7 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}
           style={{ transition: isDragging || draggedNodeId ? 'none' : 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)' }}
         >
-          {/* Layer A: Directed Smooth Cubic Bezier Curves */}
+          {/* Layer A: Directed Sharp Straight Lines */}
           {edges.map((edge) => {
             const fromPos = layout.get(edge.from);
             const toPos = layout.get(edge.to);
@@ -1476,21 +1476,15 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
               focusedNodeAddresses.has(edge.from) && focusedNodeAddresses.has(edge.to)
             );
 
-            const isDag = layoutMode === 'dag';
-            const dx = toPos.x - fromPos.x;
-            const dy = toPos.y - fromPos.y;
-            const ctrl = isDag ? Math.max(45, dx * 0.45) : Math.max(45, dy * 0.45);
-            const pathD = isDag
-              ? `M ${fromPos.x} ${fromPos.y} C ${fromPos.x + ctrl} ${fromPos.y}, ${toPos.x - ctrl} ${toPos.y}, ${toPos.x} ${toPos.y}`
-              : `M ${fromPos.x} ${fromPos.y} C ${fromPos.x} ${fromPos.y + ctrl}, ${toPos.x} ${toPos.y - ctrl}, ${toPos.x} ${toPos.y}`;
-
             return (
-              <path
-                key={`curve_${edge.id}`}
-                d={pathD}
-                fill="none"
+              <line
+                key={`line_${edge.id}`}
+                x1={fromPos.x}
+                y1={fromPos.y}
+                x2={toPos.x}
+                y2={toPos.y}
                 stroke={edgeColor}
-                strokeWidth={isEdgeFocused && focusedNodeAddresses ? '2.4' : '1.8'}
+                strokeWidth={isEdgeFocused && focusedNodeAddresses ? '2.2' : '1.8'}
                 opacity={isEdgeFocused ? 1 : 0.15}
                 markerEnd="url(#forensic-arrow)"
                 style={{ transition: 'opacity 0.25s ease' }}
