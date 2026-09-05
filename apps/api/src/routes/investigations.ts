@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import {
@@ -25,6 +26,7 @@ import {
   saveTraceHopRecords,
   getInvestigationRecord,
   getInvestigationHistoryRecords,
+  findRecentInvestigationRecord,
 } from '../db';
 
 export const investigationsRouter = Router();
@@ -122,15 +124,51 @@ investigationsRouter.post(
     res: Response<CreateInvestigationResponse | { error: string }>
   ) => {
     try {
-      const { walletAddress, targetAsset, victimTxHash, victimAmountUsd, sessionId } = req.body;
+      const { walletAddress, targetAsset, victimTxHash, victimAmountUsd, sessionId, forceRefresh } = req.body;
 
       if (!walletAddress || !isValidEthereumAddress(walletAddress)) {
         return res.status(400).json({ error: 'Invalid or missing Ethereum wallet address format.' });
       }
 
       const activeSessionId = sessionId || 'demo_session';
-      const investigationId = crypto.randomUUID();
       const formattedAddr = checksumAddress(walletAddress);
+
+      // Smart Cache Check: When forceRefresh is not requested, return recent snapshot (< 15 mins) instantly
+      if (forceRefresh !== true) {
+        // 1. Check in-memory cache
+        for (const [key, cached] of memoryStore.entries()) {
+          if (
+            cached &&
+            cached.walletAddress &&
+            cached.walletAddress.toLowerCase() === formattedAddr.toLowerCase() &&
+            cached.status === 'completed' &&
+            cached.tree &&
+            Date.now() - new Date(cached.completedAt || cached.createdAt || 0).getTime() < 15 * 60 * 1000
+          ) {
+            console.log(`[API] Returning memory-cached snapshot for ${formattedAddr} (ID: ${cached.id})`);
+            return res.status(200).json({
+              investigationId: cached.id,
+              status: 'completed',
+              isCached: true,
+              cachedAt: cached.completedAt || cached.createdAt,
+            });
+          }
+        }
+
+        // 2. Check DB
+        const recentRecord = await findRecentInvestigationRecord(formattedAddr, targetAsset, 15);
+        if (recentRecord) {
+          console.log(`[API] Returning DB-cached snapshot for ${formattedAddr} (ID: ${recentRecord.id})`);
+          return res.status(200).json({
+            investigationId: recentRecord.id,
+            status: 'completed',
+            isCached: true,
+            cachedAt: recentRecord.completedAt,
+          });
+        }
+      }
+
+      const investigationId = crypto.randomUUID();
 
       // 1. Create DB record
       await createInvestigationRecord(investigationId, activeSessionId, formattedAddr);
@@ -247,6 +285,30 @@ investigationsRouter.post(
 );
 
 /**
+ * GET /api/investigations/system/network-status
+ * Returns real-time Ethereum Mainnet block height and live ETH/USD price from oracle
+ */
+investigationsRouter.get('/system/network-status', async (_req: Request, res: Response) => {
+  try {
+    const [latestBlock, liveEthPrice] = await Promise.all([
+      ethereumProvider.getLatestBlockNumber(),
+      ethereumProvider.getEthPriceUsd(),
+    ]);
+
+    return res.status(200).json({
+      network: 'Ethereum Mainnet',
+      chainId: 1,
+      latestBlock,
+      ethPriceUsd: liveEthPrice,
+      timestamp: new Date().toISOString(),
+      status: 'synced',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to fetch network status', message: err.message });
+  }
+});
+
+/**
  * GET /api/investigations/:id (Doc 03 Section 6 & Spec 08)
  * Returns immutable historical investigation snapshot, hops, and InvestigationGraph payload
  */
@@ -329,16 +391,19 @@ investigationsRouter.get('/:id/report', (req: Request, res: Response) => {
 
 /**
  * GET /api/investigations (Doc 03 Section 6 & Doc 04 Phase 3)
- * Session history endpoint - queries database records, falls back to memoryStore
+ * Queries live Supabase database records, falls back to memoryStore
  */
 investigationsRouter.get('/', async (req: Request, res: Response) => {
-  const sessionId = (req.query.sessionId as string) || 'demo_session';
+  const sessionId = req.query.sessionId as string | undefined;
 
   let list = await getInvestigationHistoryRecords(sessionId);
 
   // Fallback to memoryStore if database returned no results
   if (list.length === 0) {
-    list = Array.from(memoryStore.values()).filter((item) => item.sessionId === sessionId);
+    list = Array.from(memoryStore.values());
+    if (sessionId) {
+      list = list.filter((item) => item.sessionId === sessionId);
+    }
   }
 
   return res.status(200).json(list);

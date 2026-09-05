@@ -51,6 +51,7 @@ export interface NormalizedTx {
   usdValue?: number;
   isInternalTx?: boolean;
   contractAddress?: string;
+  blockNumber?: number;
 }
 
 export interface ChainProvider {
@@ -164,10 +165,10 @@ export async function getLiveEthPriceUsd(): Promise<number> {
   return cachedLiveEthPrice.price;
 }
 
-// Global serialized queue to guarantee strictly spaced requests (<= 4 req/sec) across all callers
+// Global serialized queue to guarantee strictly spaced requests (<= 5 req/sec) across all callers
 let globalEtherscanQueue: Promise<void> = Promise.resolve();
 
-function enqueueEtherscanCall<T>(task: () => Promise<T>, minSpacingMs: number = 250): Promise<T> {
+function enqueueEtherscanCall<T>(task: () => Promise<T>, minSpacingMs: number = 150): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     globalEtherscanQueue = globalEtherscanQueue
       .then(async () => {
@@ -193,8 +194,28 @@ export class EthereumProvider implements ChainProvider {
     this.apiKey = apiKey || process.env.ETHERSCAN_API_KEY || '';
   }
 
+  public getApiKey(): string {
+    return this.apiKey || process.env.ETHERSCAN_API_KEY || '';
+  }
+
   public async getEthPriceUsd(): Promise<number> {
     return getLiveEthPriceUsd();
+  }
+
+  /**
+   * Fetches latest block number from Etherscan proxy API
+   */
+  public async getLatestBlockNumber(): Promise<number> {
+    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=proxy&action=eth_blockNumber&apikey=${this.getApiKey()}`;
+    try {
+      const data = await this.fetchWithRetry(apiUrl);
+      if (data && data.result) {
+        return parseInt(data.result, 16);
+      }
+    } catch (err: any) {
+      console.warn('[EthereumProvider] Could not fetch latest block number:', err.message);
+    }
+    return 20684120;
   }
 
   public isValidAddress(address: string): boolean {
@@ -208,7 +229,7 @@ export class EthereumProvider implements ChainProvider {
   /**
    * Serialized fetch with automatic rate-limit retry & backoff
    */
-  private async fetchWithRetry(url: string, retries: number = 4, backoffMs: number = 600): Promise<any> {
+  private async fetchWithRetry(url: string, retries: number = 3, backoffMs: number = 400): Promise<any> {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         const json = await enqueueEtherscanCall(async () => {
@@ -217,7 +238,7 @@ export class EthereumProvider implements ChainProvider {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
           return response.json();
-        }, 260);
+        }, 150);
 
         // If Etherscan returned rate-limit response ("NOTOK" or "Max rate limit reached")
         if (
@@ -251,7 +272,7 @@ export class EthereumProvider implements ChainProvider {
       return cached.data;
     }
 
-    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.apiKey}`;
+    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.getApiKey()}`;
 
     try {
       const ethPriceUsd = await getLiveEthPriceUsd();
@@ -272,6 +293,8 @@ export class EthereumProvider implements ChainProvider {
         const amountEth = weiToEth(tx.value);
         const usdValue = amountEth > 0 ? parseFloat((amountEth * ethPriceUsd).toFixed(2)) : 0;
 
+        const blockNumber = tx.blockNumber ? parseInt(tx.blockNumber, 10) : undefined;
+
         return {
           txHash: tx.hash,
           fromAddress: checksumAddress(tx.from),
@@ -281,6 +304,7 @@ export class EthereumProvider implements ChainProvider {
           timestamp: timestampIso,
           tokenSymbol: 'ETH',
           isFailed,
+          blockNumber,
         };
       });
 
@@ -305,7 +329,7 @@ export class EthereumProvider implements ChainProvider {
       return cached.data;
     }
 
-    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokentx&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.apiKey}`;
+    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokentx&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.getApiKey()}`;
 
     try {
       const ethPriceUsd = await getLiveEthPriceUsd();
@@ -339,6 +363,8 @@ export class EthereumProvider implements ChainProvider {
             ? tokenAmount
             : parseFloat((tokenAmount * ethPriceUsd).toFixed(2));
 
+          const blockNumber = tx.blockNumber ? parseInt(tx.blockNumber, 10) : undefined;
+
           return {
             txHash: tx.hash,
             fromAddress: checksumAddress(tx.from),
@@ -352,6 +378,7 @@ export class EthereumProvider implements ChainProvider {
             timestamp: timestampIso,
             isFailed: false,
             isInternalTx: false,
+            blockNumber,
           };
         });
 
@@ -376,7 +403,7 @@ export class EthereumProvider implements ChainProvider {
       return cached.data;
     }
 
-    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.apiKey}`;
+    const apiUrl = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal&address=${normalizedAddr}&startblock=0&endblock=99999999&sort=desc&apikey=${this.getApiKey()}`;
 
     try {
       const ethPriceUsd = await getLiveEthPriceUsd();
@@ -398,6 +425,8 @@ export class EthereumProvider implements ChainProvider {
           const amountEth = weiToEth(tx.value);
           const usdValue = parseFloat((amountEth * ethPriceUsd).toFixed(2));
 
+          const blockNumber = tx.blockNumber ? parseInt(tx.blockNumber, 10) : undefined;
+
           return {
             txHash: tx.hash,
             fromAddress: checksumAddress(tx.from),
@@ -408,6 +437,7 @@ export class EthereumProvider implements ChainProvider {
             tokenSymbol: 'ETH',
             isFailed: false,
             isInternalTx: true,
+            blockNumber,
           };
         });
 

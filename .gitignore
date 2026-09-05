@@ -23,3 +23,4 @@ build/
 .vscode/
 .idea/
 project_overview.md
+*.tsbuildinfo

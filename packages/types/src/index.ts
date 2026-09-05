@@ -22,6 +22,8 @@ export interface AssetSummary {
   totalVolumeToken: number;
 }
 
+export type DiscoveredAsset = AssetSummary;
+
 /**
  * Graph Visualization Schema (Doc 03 Section 5 & Spec 08 & Spec 09)
  */
@@ -29,7 +31,7 @@ export type WalletCategory = 'burner' | 'intermediary' | 'aggregator' | 'exchang
 
 export interface GraphNode {
   id: string; // wallet address (checksummed)
-  type: 'wallet' | 'exchange' | 'root';
+  type: 'wallet' | 'exchange' | 'root' | 'contract_pool';
   label?: string; // e.g. "Binance Hot Wallet 1"
   isFanOut?: boolean; // True if node has >1 outgoing branch
   isFanIn?: boolean;  // True if node receives from >1 branch
@@ -38,6 +40,7 @@ export interface GraphNode {
   totalReceivedUsd?: number;
   depth?: number;
   taintedAmountUsd?: number;
+  taintPercentage?: number;
   /** P1-A: Wallet classification for LEA investigator display */
   walletCategory?: WalletCategory;
   /** P1-A: Time (seconds) between this node receiving and forwarding funds */
@@ -128,6 +131,7 @@ export interface TraceHop {
   contractAddress?: string;
   confidence?: HopConfidence;
   taintedAmountUsd?: number;
+  blockNumber?: number;
 }
 
 export interface Investigation {
@@ -207,11 +211,14 @@ export interface CreateInvestigationRequest {
   victimTxHash?: string; // Optional victim transaction reference
   victimAmountUsd?: number;
   sessionId?: string;
+  forceRefresh?: boolean; // When true, bypasses snapshot cache and executes fresh on-chain trace
 }
 
 export interface CreateInvestigationResponse {
   investigationId: string;
   status: InvestigationStatus;
+  isCached?: boolean;
+  cachedAt?: string;
 }
 
 export interface RiskScoreRequest {

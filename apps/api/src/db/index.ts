@@ -288,15 +288,20 @@ export async function getInvestigationRecord(id: string): Promise<any | null> {
 /**
  * Fetch all investigation records for a session ordered by created_at DESC (Doc 03 Section 6 & Doc 04 Phase 3)
  */
-export async function getInvestigationHistoryRecords(sessionId: string): Promise<any[]> {
+export async function getInvestigationHistoryRecords(sessionId?: string): Promise<any[]> {
   try {
-    const res = await pool.query(
-      `SELECT id, session_id, wallet_address, chain, status, terminal_type, terminal_exchange, risk_level, risk_reason, risk_score, eth_price_usd, target_asset, hop_depth_used, created_at, completed_at
-       FROM investigations
-       WHERE session_id = $1
-       ORDER BY created_at DESC`,
-      [sessionId]
-    );
+    const query = sessionId
+      ? `SELECT id, session_id, wallet_address, chain, status, terminal_type, terminal_exchange, risk_level, risk_reason, risk_score, eth_price_usd, target_asset, victim_amount_usd, victim_tx_hash, hop_depth_used, created_at, completed_at
+         FROM investigations
+         WHERE session_id = $1
+         ORDER BY created_at DESC
+         LIMIT 50`
+      : `SELECT id, session_id, wallet_address, chain, status, terminal_type, terminal_exchange, risk_level, risk_reason, risk_score, eth_price_usd, target_asset, victim_amount_usd, victim_tx_hash, hop_depth_used, created_at, completed_at
+         FROM investigations
+         ORDER BY created_at DESC
+         LIMIT 50`;
+    const params = sessionId ? [sessionId] : [];
+    const res = await pool.query(query, params);
 
     return res.rows.map((inv) => ({
       id: inv.id,
@@ -311,6 +316,8 @@ export async function getInvestigationHistoryRecords(sessionId: string): Promise
       riskScore: inv.risk_score ? parseFloat(inv.risk_score) : undefined,
       ethPriceUsd: inv.eth_price_usd ? parseFloat(inv.eth_price_usd) : undefined,
       targetAsset: inv.target_asset || 'ETH',
+      victimAmountUsd: inv.victim_amount_usd ? parseFloat(inv.victim_amount_usd) : undefined,
+      victimTxHash: inv.victim_tx_hash || undefined,
       hopDepthUsed: inv.hop_depth_used,
       createdAt: inv.created_at,
       completedAt: inv.completed_at,
@@ -319,4 +326,36 @@ export async function getInvestigationHistoryRecords(sessionId: string): Promise
     console.warn('[DB] Could not query investigation history:', err.message);
     return [];
   }
+}
+
+/**
+ * Find recent completed investigation for a given wallet address (within TTL, e.g. 15 mins)
+ */
+export async function findRecentInvestigationRecord(
+  walletAddress: string,
+  targetAsset?: string,
+  maxAgeMinutes: number = 15
+): Promise<{ id: string; completedAt: string } | null> {
+  try {
+    const formattedAddr = walletAddress.toLowerCase();
+    const query = `
+      SELECT id, completed_at
+      FROM investigations
+      WHERE lower(wallet_address) = $1
+        AND status = 'completed'
+        AND completed_at >= now() - interval '15 minutes'
+      ORDER BY completed_at DESC
+      LIMIT 1
+    `;
+    const res = await pool.query(query, [formattedAddr]);
+    if (res.rows.length > 0) {
+      return {
+        id: res.rows[0].id,
+        completedAt: res.rows[0].completed_at,
+      };
+    }
+  } catch (err: any) {
+    console.warn('[DB] Could not query recent investigation record:', err.message);
+  }
+  return null;
 }

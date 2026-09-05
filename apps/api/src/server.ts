@@ -1,11 +1,11 @@
+import 'dotenv/config'; // Performance-optimised tracer build loaded
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { getApiConfig } from '@rt-cfas/config';
 import { healthRouter } from './routes/health';
 import { investigationsRouter } from './routes/investigations';
 
-dotenv.config();
 const config = getApiConfig();
 
 const app = express();
