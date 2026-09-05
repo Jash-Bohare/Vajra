@@ -327,3 +327,35 @@ export async function getInvestigationHistoryRecords(sessionId?: string): Promis
     return [];
   }
 }
+
+/**
+ * Find recent completed investigation for a given wallet address (within TTL, e.g. 15 mins)
+ */
+export async function findRecentInvestigationRecord(
+  walletAddress: string,
+  targetAsset?: string,
+  maxAgeMinutes: number = 15
+): Promise<{ id: string; completedAt: string } | null> {
+  try {
+    const formattedAddr = walletAddress.toLowerCase();
+    const query = `
+      SELECT id, completed_at
+      FROM investigations
+      WHERE lower(wallet_address) = $1
+        AND status = 'completed'
+        AND completed_at >= now() - interval '15 minutes'
+      ORDER BY completed_at DESC
+      LIMIT 1
+    `;
+    const res = await pool.query(query, [formattedAddr]);
+    if (res.rows.length > 0) {
+      return {
+        id: res.rows[0].id,
+        completedAt: res.rows[0].completed_at,
+      };
+    }
+  } catch (err: any) {
+    console.warn('[DB] Could not query recent investigation record:', err.message);
+  }
+  return null;
+}

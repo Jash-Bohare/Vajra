@@ -210,11 +210,14 @@ export interface CreateInvestigationRequest {
   victimTxHash?: string; // Optional victim transaction reference
   victimAmountUsd?: number;
   sessionId?: string;
+  forceRefresh?: boolean; // When true, bypasses snapshot cache and executes fresh on-chain trace
 }
 
 export interface CreateInvestigationResponse {
   investigationId: string;
   status: InvestigationStatus;
+  isCached?: boolean;
+  cachedAt?: string;
 }
 
 export interface RiskScoreRequest {

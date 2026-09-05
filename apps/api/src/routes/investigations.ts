@@ -26,6 +26,7 @@ import {
   saveTraceHopRecords,
   getInvestigationRecord,
   getInvestigationHistoryRecords,
+  findRecentInvestigationRecord,
 } from '../db';
 
 export const investigationsRouter = Router();
@@ -123,15 +124,51 @@ investigationsRouter.post(
     res: Response<CreateInvestigationResponse | { error: string }>
   ) => {
     try {
-      const { walletAddress, targetAsset, victimTxHash, victimAmountUsd, sessionId } = req.body;
+      const { walletAddress, targetAsset, victimTxHash, victimAmountUsd, sessionId, forceRefresh } = req.body;
 
       if (!walletAddress || !isValidEthereumAddress(walletAddress)) {
         return res.status(400).json({ error: 'Invalid or missing Ethereum wallet address format.' });
       }
 
       const activeSessionId = sessionId || 'demo_session';
-      const investigationId = crypto.randomUUID();
       const formattedAddr = checksumAddress(walletAddress);
+
+      // Smart Cache Check: When forceRefresh is not requested, return recent snapshot (< 15 mins) instantly
+      if (forceRefresh !== true) {
+        // 1. Check in-memory cache
+        for (const [key, cached] of memoryStore.entries()) {
+          if (
+            cached &&
+            cached.walletAddress &&
+            cached.walletAddress.toLowerCase() === formattedAddr.toLowerCase() &&
+            cached.status === 'completed' &&
+            cached.tree &&
+            Date.now() - new Date(cached.completedAt || cached.createdAt || 0).getTime() < 15 * 60 * 1000
+          ) {
+            console.log(`[API] Returning memory-cached snapshot for ${formattedAddr} (ID: ${cached.id})`);
+            return res.status(200).json({
+              investigationId: cached.id,
+              status: 'completed',
+              isCached: true,
+              cachedAt: cached.completedAt || cached.createdAt,
+            });
+          }
+        }
+
+        // 2. Check DB
+        const recentRecord = await findRecentInvestigationRecord(formattedAddr, targetAsset, 15);
+        if (recentRecord) {
+          console.log(`[API] Returning DB-cached snapshot for ${formattedAddr} (ID: ${recentRecord.id})`);
+          return res.status(200).json({
+            investigationId: recentRecord.id,
+            status: 'completed',
+            isCached: true,
+            cachedAt: recentRecord.completedAt,
+          });
+        }
+      }
+
+      const investigationId = crypto.randomUUID();
 
       // 1. Create DB record
       await createInvestigationRecord(investigationId, activeSessionId, formattedAddr);
