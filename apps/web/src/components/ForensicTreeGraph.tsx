@@ -958,28 +958,30 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
     const sortedDepths = Array.from(levels.keys()).sort((a, b) => a - b);
 
     if (layoutMode === 'dag') {
-      // Horizontal Straight-Flow DAG with Crossing-Reduction Barycenter Alignment
-      const colWidth = 285;
-      const rowSpacingY = 135;
+      // Horizontal Straight-Flow DAG (Guaranteed 0-Crossing Hierarchical Planar Layout)
+      const colWidth = 290;
+      const minNodeGapY = 95; // Minimum vertical gap between adjacent node centers in the same column
       const startX = 100;
-      const centerY = 240;
+      const centerY = 300;
 
       // 1. Root Level (Depth 0)
       const rootNodes = levels.get(0) || [];
-      rootNodes.forEach((rn) => {
-        coords.set(rn.id, { x: startX, y: centerY, node: rn });
+      rootNodes.forEach((rn, idx) => {
+        const offset = (idx - (rootNodes.length - 1) / 2) * minNodeGapY;
+        coords.set(rn.id, { x: startX, y: centerY + offset, node: rn });
       });
 
-      // 2. Forward Layer-by-Layer Barycenter Placement
+      // 2. Forward Layer-by-Layer Placement
+      // Invariant: Order of nodes in layer d is strictly determined by parent Y position (no interleaving)
       sortedDepths.forEach((d) => {
         if (d === 0) return;
         const levelNodes = levels.get(d) || [];
         const x = startX + d * colWidth;
 
-        // Compute barycenter target Y based on incoming parent positions
-        const items = levelNodes.map((node) => {
+        // Determine primary parent Y and barycenter for each node
+        const nodeItems = levelNodes.map((node) => {
           const parents = parentMap.get(node.id) || [];
-          let targetY = centerY;
+          let parentY = centerY;
 
           if (parents.length > 0) {
             const parentYs = parents
@@ -987,68 +989,101 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
               .filter((y): y is number => y !== undefined);
 
             if (parentYs.length > 0) {
-              targetY = parentYs.reduce((a, b) => a + b, 0) / parentYs.length;
+              parentY = parentYs.reduce((a, b) => a + b, 0) / parentYs.length;
             }
           }
 
-          return { id: node.id, node, targetY, parents };
+          return {
+            id: node.id,
+            node,
+            parentY,
+            taint: node.taintPercentage || 0,
+          };
         });
 
-        // Group siblings sharing the same primary parent to preserve topological branch alignment
-        const parentGroups = new Map<string, typeof items>();
-        items.forEach((item) => {
-          const primaryP = item.parents[0] || 'none';
-          if (!parentGroups.has(primaryP)) parentGroups.set(primaryP, []);
-          parentGroups.get(primaryP)!.push(item);
-        });
-
-        // Apply clean vertical sibling spread relative to parent
-        parentGroups.forEach((group) => {
-          if (group.length > 1) {
-            const count = group.length;
-            const mid = (count - 1) / 2;
-            group.forEach((item, idx) => {
-              item.targetY += (idx - mid) * (rowSpacingY * 0.75);
-            });
+        // Strict non-crossing sort:
+        // 1. Sort strictly by parent Y position (top-to-bottom)
+        // 2. Within the same parent, sort by taint volume descending
+        nodeItems.sort((a, b) => {
+          if (Math.abs(a.parentY - b.parentY) > 0.001) {
+            return a.parentY - b.parentY;
           }
+          return b.taint - a.taint;
         });
 
-        // Sort strictly by targetY to mathematically eliminate line crossings
-        items.sort((a, b) => {
-          if (Math.abs(a.targetY - b.targetY) < 0.01) {
-            return (b.node.taintPercentage || 0) - (a.node.taintPercentage || 0);
-          }
-          return a.targetY - b.targetY;
+        // Assign initial target Y based on parent barycenter
+        const placed: { id: string; node: ForensicNode; y: number }[] = [];
+        nodeItems.forEach((item) => {
+          placed.push({ id: item.id, node: item.node, y: item.parentY });
         });
 
-        // Enforce strict vertical collision avoidance
-        const minGap = 115;
-        for (let k = 1; k < items.length; k++) {
-          if (items[k].targetY - items[k - 1].targetY < minGap) {
-            items[k].targetY = items[k - 1].targetY + minGap;
+        // Space out nodes consecutively to enforce minNodeGapY while preserving strict order
+        for (let i = 1; i < placed.length; i++) {
+          if (placed[i].y < placed[i - 1].y + minNodeGapY) {
+            placed[i].y = placed[i - 1].y + minNodeGapY;
           }
         }
 
-        // Center the layer around overall canvas median
-        const minColY = items[0]?.targetY ?? centerY;
-        const maxColY = items[items.length - 1]?.targetY ?? centerY;
-        const colCenter = (minColY + maxColY) / 2;
-        const shiftY = (centerY - colCenter) * 0.4;
+        // Backward centering shift (align layer median to parent cluster median)
+        const currentCenter = (placed[0].y + placed[placed.length - 1].y) / 2;
+        const targetCenter = nodeItems.reduce((acc, it) => acc + it.parentY, 0) / nodeItems.length;
+        const shiftY = targetCenter - currentCenter;
 
-        items.forEach((item) => {
-          coords.set(item.id, { x, y: item.targetY + shiftY, node: item.node });
+        placed.forEach((p) => {
+          coords.set(p.id, { x, y: p.y + shiftY, node: p.node });
         });
       });
+
+      // 3. Backward Relaxation Pass (Sugiyama centering: align parents to their children's midpoint)
+      for (let d = sortedDepths.length - 2; d >= 0; d--) {
+        const depthVal = sortedDepths[d];
+        const levelNodes = levels.get(depthVal) || [];
+
+        levelNodes.forEach((node) => {
+          const children = childrenMap.get(node.id) || [];
+          if (children.length > 0) {
+            const childYs = children
+              .map((c) => coords.get(c)?.y)
+              .filter((y): y is number => y !== undefined);
+
+            if (childYs.length > 0) {
+              const childMidY = (Math.min(...childYs) + Math.max(...childYs)) / 2;
+              const cur = coords.get(node.id);
+              if (cur) {
+                coords.set(node.id, {
+                  x: cur.x,
+                  y: cur.y * 0.35 + childMidY * 0.65,
+                  node: cur.node,
+                });
+              }
+            }
+          }
+        });
+
+        // Enforce minNodeGapY in this layer to prevent collisions after backward relaxation
+        const layerCoords = levelNodes
+          .map((n) => ({ id: n.id, coord: coords.get(n.id)! }))
+          .filter((item) => item.coord !== undefined);
+
+        layerCoords.sort((a, b) => a.coord.y - b.coord.y);
+
+        for (let i = 1; i < layerCoords.length; i++) {
+          if (layerCoords[i].coord.y < layerCoords[i - 1].coord.y + minNodeGapY) {
+            layerCoords[i].coord.y = layerCoords[i - 1].coord.y + minNodeGapY;
+          }
+        }
+      }
     } else {
       // Top-Down Hierarchical Tree with Horizontal Barycenter Spacing
-      const canvasCenterX = 400;
-      const rowHeight = 165;
-      const colSpacingX = 180;
-      const startY = 80;
+      const canvasCenterX = 450;
+      const rowHeight = 175;
+      const minNodeGapX = 170;
+      const startY = 90;
 
       const rootNodes = levels.get(0) || [];
-      rootNodes.forEach((rn) => {
-        coords.set(rn.id, { x: canvasCenterX, y: startY, node: rn });
+      rootNodes.forEach((rn, idx) => {
+        const offset = (idx - (rootNodes.length - 1) / 2) * minNodeGapX;
+        coords.set(rn.id, { x: canvasCenterX + offset, y: startY, node: rn });
       });
 
       sortedDepths.forEach((d) => {
@@ -1056,9 +1091,9 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
         const levelNodes = levels.get(d) || [];
         const y = startY + d * rowHeight;
 
-        const items = levelNodes.map((node) => {
+        const nodeItems = levelNodes.map((node) => {
           const parents = parentMap.get(node.id) || [];
-          let targetX = canvasCenterX;
+          let parentX = canvasCenterX;
 
           if (parents.length > 0) {
             const parentXs = parents
@@ -1066,53 +1101,84 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
               .filter((x): x is number => x !== undefined);
 
             if (parentXs.length > 0) {
-              targetX = parentXs.reduce((a, b) => a + b, 0) / parentXs.length;
+              parentX = parentXs.reduce((a, b) => a + b, 0) / parentXs.length;
             }
           }
 
-          return { id: node.id, node, targetX, parents };
+          return {
+            id: node.id,
+            node,
+            parentX,
+            taint: node.taintPercentage || 0,
+          };
         });
 
-        const parentGroups = new Map<string, typeof items>();
-        items.forEach((item) => {
-          const primaryP = item.parents[0] || 'none';
-          if (!parentGroups.has(primaryP)) parentGroups.set(primaryP, []);
-          parentGroups.get(primaryP)!.push(item);
-        });
-
-        parentGroups.forEach((group) => {
-          if (group.length > 1) {
-            const count = group.length;
-            const mid = (count - 1) / 2;
-            group.forEach((item, idx) => {
-              item.targetX += (idx - mid) * (colSpacingX * 0.85);
-            });
+        // Sort strictly by parent X to prevent line crossings
+        nodeItems.sort((a, b) => {
+          if (Math.abs(a.parentX - b.parentX) > 0.001) {
+            return a.parentX - b.parentX;
           }
+          return b.taint - a.taint;
         });
 
-        items.sort((a, b) => {
-          if (Math.abs(a.targetX - b.targetX) < 0.01) {
-            return (b.node.taintPercentage || 0) - (a.node.taintPercentage || 0);
-          }
-          return a.targetX - b.targetX;
+        const placed: { id: string; node: ForensicNode; x: number }[] = [];
+        nodeItems.forEach((item) => {
+          placed.push({ id: item.id, node: item.node, x: item.parentX });
         });
 
-        const minGapX = 165;
-        for (let k = 1; k < items.length; k++) {
-          if (items[k].targetX - items[k - 1].targetX < minGapX) {
-            items[k].targetX = items[k - 1].targetX + minGapX;
+        for (let i = 1; i < placed.length; i++) {
+          if (placed[i].x < placed[i - 1].x + minNodeGapX) {
+            placed[i].x = placed[i - 1].x + minNodeGapX;
           }
         }
 
-        const minLevelX = items[0]?.targetX ?? canvasCenterX;
-        const maxLevelX = items[items.length - 1]?.targetX ?? canvasCenterX;
-        const levelCenter = (minLevelX + maxLevelX) / 2;
-        const shiftX = (canvasCenterX - levelCenter) * 0.4;
+        const currentCenter = (placed[0].x + placed[placed.length - 1].x) / 2;
+        const targetCenter = nodeItems.reduce((acc, it) => acc + it.parentX, 0) / nodeItems.length;
+        const shiftX = targetCenter - currentCenter;
 
-        items.forEach((item) => {
-          coords.set(item.id, { x: item.targetX + shiftX, y, node: item.node });
+        placed.forEach((p) => {
+          coords.set(p.id, { x: p.x + shiftX, y, node: p.node });
         });
       });
+
+      // Backward relaxation for Tree mode
+      for (let d = sortedDepths.length - 2; d >= 0; d--) {
+        const depthVal = sortedDepths[d];
+        const levelNodes = levels.get(depthVal) || [];
+
+        levelNodes.forEach((node) => {
+          const children = childrenMap.get(node.id) || [];
+          if (children.length > 0) {
+            const childXs = children
+              .map((c) => coords.get(c)?.x)
+              .filter((x): x is number => x !== undefined);
+
+            if (childXs.length > 0) {
+              const childMidX = (Math.min(...childXs) + Math.max(...childXs)) / 2;
+              const cur = coords.get(node.id);
+              if (cur) {
+                coords.set(node.id, {
+                  x: cur.x * 0.35 + childMidX * 0.65,
+                  y: cur.y,
+                  node: cur.node,
+                });
+              }
+            }
+          }
+        });
+
+        const layerCoords = levelNodes
+          .map((n) => ({ id: n.id, coord: coords.get(n.id)! }))
+          .filter((item) => item.coord !== undefined);
+
+        layerCoords.sort((a, b) => a.coord.x - b.coord.x);
+
+        for (let i = 1; i < layerCoords.length; i++) {
+          if (layerCoords[i].coord.x < layerCoords[i - 1].coord.x + minNodeGapX) {
+            layerCoords[i].coord.x = layerCoords[i - 1].coord.x + minNodeGapX;
+          }
+        }
+      }
     }
 
     return coords;
