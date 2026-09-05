@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import 'dotenv/config'; // Performance-optimised tracer build loaded
+
 import express from 'express';
 import cors from 'cors';
 import { getApiConfig } from '@rt-cfas/config';

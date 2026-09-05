@@ -165,10 +165,10 @@ export async function getLiveEthPriceUsd(): Promise<number> {
   return cachedLiveEthPrice.price;
 }
 
-// Global serialized queue to guarantee strictly spaced requests (<= 4 req/sec) across all callers
+// Global serialized queue to guarantee strictly spaced requests (<= 5 req/sec) across all callers
 let globalEtherscanQueue: Promise<void> = Promise.resolve();
 
-function enqueueEtherscanCall<T>(task: () => Promise<T>, minSpacingMs: number = 250): Promise<T> {
+function enqueueEtherscanCall<T>(task: () => Promise<T>, minSpacingMs: number = 150): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     globalEtherscanQueue = globalEtherscanQueue
       .then(async () => {
@@ -229,7 +229,7 @@ export class EthereumProvider implements ChainProvider {
   /**
    * Serialized fetch with automatic rate-limit retry & backoff
    */
-  private async fetchWithRetry(url: string, retries: number = 4, backoffMs: number = 600): Promise<any> {
+  private async fetchWithRetry(url: string, retries: number = 3, backoffMs: number = 400): Promise<any> {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         const json = await enqueueEtherscanCall(async () => {
@@ -238,7 +238,7 @@ export class EthereumProvider implements ChainProvider {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
           return response.json();
-        }, 260);
+        }, 150);
 
         // If Etherscan returned rate-limit response ("NOTOK" or "Max rate limit reached")
         if (

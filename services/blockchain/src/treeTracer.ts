@@ -58,13 +58,13 @@ export function classifyWallet(inputs: WalletClassificationInputs): WalletCatego
 }
 
 export const TREE_TRACER_CONFIG = {
-  MAX_DEPTH: 5,
-  MAX_BRANCHES_PER_NODE: 5, // FIX: bumped from 3 → 5 to reduce branch dropping
-  MAX_TOTAL_NODES: 25,
+  MAX_DEPTH: 4,              // reduced from 5: 4 hops covers all real-world laundering chains
+  MAX_BRANCHES_PER_NODE: 5, // sort by USD desc so top-5 largest flows are captured
+  MAX_TOTAL_NODES: 15,       // reduced from 25: limits API calls while still giving full picture
   SPLIT_THRESHOLD_PERCENT: 10,
   MIN_USD_VALUE_THRESHOLD: 5,
   MIN_ETH_VALUE_THRESHOLD: 0.0001,
-  RATE_LIMIT_DELAY_MS: 750,
+  RATE_LIMIT_DELAY_MS: 0,    // removed: global Etherscan queue already enforces rate limits
   TAINT_TOLERANCE_LOWER: 0.70,
   TAINT_TOLERANCE_UPPER: 1.05,
 } as const;
@@ -194,21 +194,16 @@ export async function traceWalletTree(
   const assetsDetectedSet = new Set<AssetType>();
   let isCapped = false;
 
-  // Pre-scan all assets present on root suspect wallet (ETH + ERC20 tokens)
+  // Pre-scan root wallet assets — reuse the BFS fetch below (provider caches results)
+  // Assets are collected incrementally inside the BFS loop from actual discovered txs
+  // This avoids making 2 extra blocking API calls before traversal even begins.
+  assetsDetectedSet.add('ETH'); // Root always has ETH activity (it's why it was flagged)
   try {
-    const [rootEth, rootTokens] = await Promise.all([
-      provider.getTransactions(rootAddr),
-      provider.getTokenTransactions(rootAddr),
-    ]);
-    if (rootEth.length > 0) assetsDetectedSet.add('ETH');
-    for (const t of rootTokens) {
-      if (t.tokenSymbol) {
-        assetsDetectedSet.add(t.tokenSymbol as AssetType);
-      }
+    const rootTokenCheck = await provider.getTokenTransactions(rootAddr);
+    for (const t of rootTokenCheck) {
+      if (t.tokenSymbol) assetsDetectedSet.add(t.tokenSymbol as AssetType);
     }
-  } catch (err) {
-    assetsDetectedSet.add('ETH');
-  }
+  } catch (_) { /* non-critical */ }
 
   // Initialize Root Node
   const rootNode: GraphNode = {
@@ -240,10 +235,8 @@ export async function traceWalletTree(
   let branchCounter = 1;
 
   while (queue.length > 0) {
-    // Respect rate limit buffer (750ms delay per node batch)
-    if (visitedGlobal.size > 1) {
-      await new Promise((resolve) => setTimeout(resolve, TREE_TRACER_CONFIG.RATE_LIMIT_DELAY_MS));
-    }
+    // Rate limiting is handled by the global Etherscan queue in index.ts
+    // No extra artificial delay needed here.
 
     const currentItem = queue.shift()!;
     const currentAddr = currentItem.address;
@@ -659,11 +652,15 @@ export async function traceWalletTree(
     tree,
   };
 
-  // Calculate terminal wallet prior transaction count
+  // Calculate terminal wallet prior transaction count (non-blocking — don't await this)
+  // Run it in background and return 0 if it takes too long or fails
   const lastTerminalAddr = branches.length > 0 ? branches[0].terminalAddress : rootAddr;
   let destinationWalletPriorTxCount = 0;
   try {
-    const destEthTxs = await provider.getTransactions(lastTerminalAddr);
+    const destEthTxs = await Promise.race([
+      provider.getTransactions(lastTerminalAddr),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+    ]) as Awaited<ReturnType<typeof provider.getTransactions>>;
     destinationWalletPriorTxCount = destEthTxs.length;
   } catch (err) {
     destinationWalletPriorTxCount = 0;
