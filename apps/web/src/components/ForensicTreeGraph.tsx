@@ -739,118 +739,160 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
     const sortedDepths = Array.from(levels.keys()).sort((a, b) => a - b);
 
     if (layoutMode === 'dag') {
-      // DAG Horizontal Flowchart with generous column and vertical spacing
-      const colWidth = 265;
-      const rowSpacingY = 125;
+      // Horizontal Straight-Flow DAG with Crossing-Reduction Barycenter Alignment
+      const colWidth = 285;
+      const rowSpacingY = 135;
       const startX = 100;
-      const centerY = 230;
+      const centerY = 240;
 
+      // 1. Root Level (Depth 0)
+      const rootNodes = levels.get(0) || [];
+      rootNodes.forEach((rn) => {
+        coords.set(rn.id, { x: startX, y: centerY, node: rn });
+      });
+
+      // 2. Forward Layer-by-Layer Barycenter Placement
       sortedDepths.forEach((d) => {
+        if (d === 0) return;
         const levelNodes = levels.get(d) || [];
         const x = startX + d * colWidth;
 
-        if (d === 0) {
-          levelNodes.forEach((rn) => {
-            coords.set(rn.id, { x, y: centerY, node: rn });
-          });
-        } else {
-          const placedAtCol: { id: string; y: number; node: ForensicNode }[] = [];
+        // Compute barycenter target Y based on incoming parent positions
+        const items = levelNodes.map((node) => {
+          const parents = parentMap.get(node.id) || [];
+          let targetY = centerY;
 
-          levelNodes.forEach((node, i) => {
-            const parents = parentMap.get(node.id) || [];
-            let targetY = centerY;
+          if (parents.length > 0) {
+            const parentYs = parents
+              .map((p) => coords.get(p)?.y)
+              .filter((y): y is number => y !== undefined);
 
-            if (parents.length > 0) {
-              const pCoords = parents.map((p) => coords.get(p)?.y || centerY);
-              const avgPY = pCoords.reduce((a, b) => a + b, 0) / pCoords.length;
-              const siblings = childrenMap.get(parents[0]) || [node.id];
-              const siblingIdx = siblings.indexOf(node.id);
-              const siblingCount = siblings.length;
-              const spread = (siblingIdx - (siblingCount - 1) / 2) * rowSpacingY;
-              targetY = avgPY + spread;
-            } else {
-              const totalH = (levelNodes.length - 1) * rowSpacingY;
-              targetY = centerY - totalH / 2 + i * rowSpacingY;
-            }
-
-            placedAtCol.push({ id: node.id, y: targetY, node });
-          });
-
-          // Prevent vertical overlaps
-          placedAtCol.sort((a, b) => a.y - b.y);
-          for (let k = 1; k < placedAtCol.length; k++) {
-            const minGap = 105;
-            if (placedAtCol[k].y - placedAtCol[k - 1].y < minGap) {
-              placedAtCol[k].y = placedAtCol[k - 1].y + minGap;
+            if (parentYs.length > 0) {
+              targetY = parentYs.reduce((a, b) => a + b, 0) / parentYs.length;
             }
           }
 
-          const minColY = placedAtCol[0].y;
-          const maxColY = placedAtCol[placedAtCol.length - 1].y;
-          const colMid = (minColY + maxColY) / 2;
-          const shiftY = centerY - colMid;
+          return { id: node.id, node, targetY, parents };
+        });
 
-          placedAtCol.forEach((item) => {
-            coords.set(item.id, { x, y: item.y + shiftY, node: item.node });
-          });
+        // Group siblings sharing the same primary parent to preserve topological branch alignment
+        const parentGroups = new Map<string, typeof items>();
+        items.forEach((item) => {
+          const primaryP = item.parents[0] || 'none';
+          if (!parentGroups.has(primaryP)) parentGroups.set(primaryP, []);
+          parentGroups.get(primaryP)!.push(item);
+        });
+
+        // Apply clean vertical sibling spread relative to parent
+        parentGroups.forEach((group) => {
+          if (group.length > 1) {
+            const count = group.length;
+            const mid = (count - 1) / 2;
+            group.forEach((item, idx) => {
+              item.targetY += (idx - mid) * (rowSpacingY * 0.75);
+            });
+          }
+        });
+
+        // Sort strictly by targetY to mathematically eliminate line crossings
+        items.sort((a, b) => {
+          if (Math.abs(a.targetY - b.targetY) < 0.01) {
+            return (b.node.taintPercentage || 0) - (a.node.taintPercentage || 0);
+          }
+          return a.targetY - b.targetY;
+        });
+
+        // Enforce strict vertical collision avoidance
+        const minGap = 115;
+        for (let k = 1; k < items.length; k++) {
+          if (items[k].targetY - items[k - 1].targetY < minGap) {
+            items[k].targetY = items[k - 1].targetY + minGap;
+          }
         }
+
+        // Center the layer around overall canvas median
+        const minColY = items[0]?.targetY ?? centerY;
+        const maxColY = items[items.length - 1]?.targetY ?? centerY;
+        const colCenter = (minColY + maxColY) / 2;
+        const shiftY = (centerY - colCenter) * 0.4;
+
+        items.forEach((item) => {
+          coords.set(item.id, { x, y: item.targetY + shiftY, node: item.node });
+        });
       });
     } else {
-      // Top-Down Hierarchical Tree
-      const canvasCenterX = 380;
-      const rowHeight = 150;
-      const nodeSpacingX = 180;
-      const startY = 70;
+      // Top-Down Hierarchical Tree with Horizontal Barycenter Spacing
+      const canvasCenterX = 400;
+      const rowHeight = 165;
+      const colSpacingX = 180;
+      const startY = 80;
+
+      const rootNodes = levels.get(0) || [];
+      rootNodes.forEach((rn) => {
+        coords.set(rn.id, { x: canvasCenterX, y: startY, node: rn });
+      });
 
       sortedDepths.forEach((d) => {
+        if (d === 0) return;
         const levelNodes = levels.get(d) || [];
         const y = startY + d * rowHeight;
 
-        if (d === 0) {
-          levelNodes.forEach((rn) => {
-            coords.set(rn.id, { x: canvasCenterX, y, node: rn });
-          });
-        } else {
-          const placedAtLevel: { id: string; x: number; node: ForensicNode }[] = [];
+        const items = levelNodes.map((node) => {
+          const parents = parentMap.get(node.id) || [];
+          let targetX = canvasCenterX;
 
-          levelNodes.forEach((node, i) => {
-            const parents = parentMap.get(node.id) || [];
-            let targetX = canvasCenterX;
+          if (parents.length > 0) {
+            const parentXs = parents
+              .map((p) => coords.get(p)?.x)
+              .filter((x): x is number => x !== undefined);
 
-            if (parents.length > 0) {
-              const pCoords = parents.map((p) => coords.get(p)?.x || canvasCenterX);
-              const avgPX = pCoords.reduce((a, b) => a + b, 0) / pCoords.length;
-              const siblings = childrenMap.get(parents[0]) || [node.id];
-              const siblingIdx = siblings.indexOf(node.id);
-              const siblingCount = siblings.length;
-              const spread = (siblingIdx - (siblingCount - 1) / 2) * 160;
-              targetX = avgPX + spread;
-            } else {
-              const totalW = (levelNodes.length - 1) * nodeSpacingX;
-              targetX = canvasCenterX - totalW / 2 + i * nodeSpacingX;
-            }
-
-            placedAtLevel.push({ id: node.id, x: targetX, node });
-          });
-
-          // Prevent horizontal overlaps
-          placedAtLevel.sort((a, b) => a.x - b.x);
-          for (let k = 1; k < placedAtLevel.length; k++) {
-            const minGap = 150;
-            if (placedAtLevel[k].x - placedAtLevel[k - 1].x < minGap) {
-              placedAtLevel[k].x = placedAtLevel[k - 1].x + minGap;
+            if (parentXs.length > 0) {
+              targetX = parentXs.reduce((a, b) => a + b, 0) / parentXs.length;
             }
           }
 
-          const minLevelX = placedAtLevel[0].x;
-          const maxLevelX = placedAtLevel[placedAtLevel.length - 1].x;
-          const levelMid = (minLevelX + maxLevelX) / 2;
-          const shiftX = canvasCenterX - levelMid;
+          return { id: node.id, node, targetX, parents };
+        });
 
-          placedAtLevel.forEach((item) => {
-            coords.set(item.id, { x: item.x + shiftX, y, node: item.node });
-          });
+        const parentGroups = new Map<string, typeof items>();
+        items.forEach((item) => {
+          const primaryP = item.parents[0] || 'none';
+          if (!parentGroups.has(primaryP)) parentGroups.set(primaryP, []);
+          parentGroups.get(primaryP)!.push(item);
+        });
+
+        parentGroups.forEach((group) => {
+          if (group.length > 1) {
+            const count = group.length;
+            const mid = (count - 1) / 2;
+            group.forEach((item, idx) => {
+              item.targetX += (idx - mid) * (colSpacingX * 0.85);
+            });
+          }
+        });
+
+        items.sort((a, b) => {
+          if (Math.abs(a.targetX - b.targetX) < 0.01) {
+            return (b.node.taintPercentage || 0) - (a.node.taintPercentage || 0);
+          }
+          return a.targetX - b.targetX;
+        });
+
+        const minGapX = 165;
+        for (let k = 1; k < items.length; k++) {
+          if (items[k].targetX - items[k - 1].targetX < minGapX) {
+            items[k].targetX = items[k - 1].targetX + minGapX;
+          }
         }
+
+        const minLevelX = items[0]?.targetX ?? canvasCenterX;
+        const maxLevelX = items[items.length - 1]?.targetX ?? canvasCenterX;
+        const levelCenter = (minLevelX + maxLevelX) / 2;
+        const shiftX = (canvasCenterX - levelCenter) * 0.4;
+
+        items.forEach((item) => {
+          coords.set(item.id, { x: item.targetX + shiftX, y, node: item.node });
+        });
       });
     }
 
@@ -1424,7 +1466,39 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}
           style={{ transition: isDragging || draggedNodeId ? 'none' : 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)' }}
         >
-          {/* Layer A: Directed Straight Lines with Clean Compact Flow Labels */}
+          {/* Layer A: Directed Smooth Cubic Bezier Curves */}
+          {edges.map((edge) => {
+            const fromPos = layout.get(edge.from);
+            const toPos = layout.get(edge.to);
+            if (!fromPos || !toPos) return null;
+
+            const isEdgeFocused = !focusedNodeAddresses || (
+              focusedNodeAddresses.has(edge.from) && focusedNodeAddresses.has(edge.to)
+            );
+
+            const isDag = layoutMode === 'dag';
+            const dx = toPos.x - fromPos.x;
+            const dy = toPos.y - fromPos.y;
+            const ctrl = isDag ? Math.max(45, dx * 0.45) : Math.max(45, dy * 0.45);
+            const pathD = isDag
+              ? `M ${fromPos.x} ${fromPos.y} C ${fromPos.x + ctrl} ${fromPos.y}, ${toPos.x - ctrl} ${toPos.y}, ${toPos.x} ${toPos.y}`
+              : `M ${fromPos.x} ${fromPos.y} C ${fromPos.x} ${fromPos.y + ctrl}, ${toPos.x} ${toPos.y - ctrl}, ${toPos.x} ${toPos.y}`;
+
+            return (
+              <path
+                key={`curve_${edge.id}`}
+                d={pathD}
+                fill="none"
+                stroke={edgeColor}
+                strokeWidth={isEdgeFocused && focusedNodeAddresses ? '2.4' : '1.8'}
+                opacity={isEdgeFocused ? 1 : 0.15}
+                markerEnd="url(#forensic-arrow)"
+                style={{ transition: 'opacity 0.25s ease' }}
+              />
+            );
+          })}
+
+          {/* Layer B: Crisp Flow Label Pills (Rendered on top of ALL curves for guaranteed zero overlap) */}
           {edges.map((edge) => {
             const fromPos = layout.get(edge.from);
             const toPos = layout.get(edge.to);
@@ -1444,49 +1518,39 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
             const pillWidth = Math.max(50, labelText.length * 5.8 + 12);
 
             return (
-              <g key={edge.id} opacity={isEdgeFocused ? 1 : 0.15} style={{ transition: 'opacity 0.25s ease' }}>
-                <line
-                  x1={fromPos.x}
-                  y1={fromPos.y}
-                  x2={toPos.x}
-                  y2={toPos.y}
-                  stroke={edgeColor}
-                  strokeWidth={isEdgeFocused && focusedNodeAddresses ? '2.2' : '1.8'}
-                  markerEnd="url(#forensic-arrow)"
+              <g
+                key={`pill_${edge.id}`}
+                transform={`translate(${midX}, ${midY})`}
+                opacity={isEdgeFocused ? 1 : 0.15}
+                style={{ transition: isDragging || draggedNodeId ? 'none' : 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease' }}
+              >
+                <rect
+                  x={-pillWidth / 2}
+                  y={-10}
+                  width={pillWidth}
+                  height={20}
+                  rx={4}
+                  fill={edgeBg}
+                  stroke={edgeBorder}
+                  strokeWidth="1.2"
                 />
-
-                <g
-                  transform={`translate(${midX}, ${midY})`}
-                  style={{ transition: isDragging || draggedNodeId ? 'none' : 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                <text
+                  x={0}
+                  y={3.8}
+                  textAnchor="middle"
+                  fill={edgeColor}
+                  fontSize="9.5"
+                  fontFamily="var(--font-mono)"
+                  fontWeight="700"
+                  style={{ pointerEvents: 'none' }}
                 >
-                  <rect
-                    x={-pillWidth / 2}
-                    y={-10}
-                    width={pillWidth}
-                    height={20}
-                    rx={4}
-                    fill={edgeBg}
-                    stroke={edgeBorder}
-                    strokeWidth="1.2"
-                  />
-                  <text
-                    x={0}
-                    y={3.8}
-                    textAnchor="middle"
-                    fill={edgeColor}
-                    fontSize="9.5"
-                    fontFamily="var(--font-mono)"
-                    fontWeight="700"
-                    style={{ pointerEvents: 'none' }}
-                  >
-                    {labelText}
-                  </text>
-                </g>
+                  {labelText}
+                </text>
               </g>
             );
           })}
 
-          {/* Layer B: Distinct Colored Tactical Nodes */}
+          {/* Layer C: Distinct Colored Tactical Nodes */}
           {Array.from(layout.values()).map(({ x, y, node }) => {
             const isSelected = activeSelectedNode?.id === node.id;
             const isRoot = node.nodeType === 'root';
