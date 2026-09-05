@@ -134,43 +134,7 @@ export const AttributionTerminal: React.FC = () => {
     }
   };
 
-  const ROLE_DEFINITIONS = [
-    {
-      role: 'Suspect Origin',
-      code: 'ROOT',
-      color: isLight ? '#dc2626' : '#ef4444',
-      meaning: 'Inception wallet initiated fund theft',
-      action: 'Anchor root transaction hash in FIR',
-    },
-    {
-      role: 'VASP Exchange Exit',
-      code: 'VASP',
-      color: isLight ? '#047857' : '#10b981',
-      meaning: 'Verified exchange deposit endpoint',
-      action: 'Issue Section 91 Cr.P.C. subpoena notice',
-    },
-    {
-      role: 'Peeling Intermediary',
-      code: 'H1 / H2',
-      color: isLight ? '#0284c7' : '#00e5ff',
-      meaning: 'Intermediate transit relay wallet',
-      action: 'Track subsequent outbound hops',
-    },
-    {
-      role: 'Mixer / Aggregator',
-      code: 'AGG',
-      color: isLight ? '#7c3aed' : '#c084fc',
-      meaning: 'Consolidation wallet (2+ inflows)',
-      action: 'Identify pooled outgoing disbursements',
-    },
-    {
-      role: 'Burner / Dust Leaf',
-      code: 'LEAF',
-      color: isLight ? '#b45309' : '#f59e0b',
-      meaning: 'Terminal endpoint holding dust balance',
-      action: 'Mark branch as closed / residual leaf',
-    },
-  ];
+
 
   if (loading) {
     return (
@@ -543,126 +507,33 @@ export const AttributionTerminal: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. SIDE-BY-SIDE: Visualizer Canvas (Left ~68%) + Node Role Matrix Card (Right ~32%) */}
+      {/* 3. Full-Width Forensic Visualizer Canvas */}
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) 340px',
-          gap: '14px',
-          alignItems: 'stretch',
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--border-tactical)',
+          borderRadius: '6px',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
         }}
       >
-        {/* Left Side: Graph Visualizer Canvas Card */}
-        <div
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid var(--border-tactical)',
-            borderRadius: '6px',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <ForensicTreeGraph
-            tree={data?.tree}
-            graph={data?.graph}
-            hops={rawHops}
-            rootAddress={suspectWallet}
-            terminalExchange={data?.terminalExchange}
-            terminalType={data?.terminalType}
-            targetAsset={targetAsset}
-            selectedBranchId={selectedBranchId}
-            selectedNodeId={selectedNodeId}
-            onSelectNode={(node) => setSelectedNodeId(node ? node.id : null)}
-            layoutMode={layoutMode}
-            onLayoutModeChange={(m) => setLayoutMode(m)}
-            height="460px"
-          />
-        </div>
-
-        {/* Right Side: Persistent Forensic Role Identification Matrix */}
-        <div
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid var(--border-tactical)',
-            borderRadius: '6px',
-            padding: '12px 14px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            height: '460px',
-            boxSizing: 'border-box',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-tactical)', paddingBottom: '7px' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--accent-cyan)' }}>
-              category
-            </span>
-            <div>
-              <h4 style={{ fontFamily: 'var(--font-headline)', fontSize: '12.5px', fontWeight: 800, color: 'var(--text-main)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Node Role Matrix
-              </h4>
-              <p style={{ fontSize: '10.5px', color: 'var(--text-dim)', margin: 0 }}>
-                Forensic classification keys
-              </p>
-            </div>
-          </div>
-
-          {/* 5 Distinct Cards filling space with consistent 7px gaps and legible typography */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', flex: 1, minHeight: 0 }}>
-            {ROLE_DEFINITIONS.map((def) => (
-              <div
-                key={def.code}
-                style={{
-                  flex: 1,
-                  padding: '6px 10px',
-                  backgroundColor: 'var(--bg-surface-low)',
-                  border: '1px solid var(--border-tactical)',
-                  borderLeft: `3.5px solid ${def.color}`,
-                  borderRadius: '4px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  gap: '3px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: def.color, display: 'inline-block', flexShrink: 0 }} />
-                    <span style={{ fontFamily: 'var(--font-headline)', fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>
-                      {def.role}
-                    </span>
-                  </div>
-                  <span
-                    style={{
-                      padding: '1.5px 6px',
-                      backgroundColor: 'var(--bg-surface)',
-                      color: def.color,
-                      border: '1px solid var(--border-tactical)',
-                      borderRadius: '3px',
-                      fontSize: '10px',
-                      fontFamily: 'var(--font-mono)',
-                      fontWeight: 800,
-                    }}
-                  >
-                    {def.code}
-                  </span>
-                </div>
-
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.3' }}>
-                  {def.meaning}
-                </p>
-
-                <div style={{ fontSize: '10.5px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: '13px', color: 'var(--accent-cyan)' }}>chevron_right</span>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{def.action}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ForensicTreeGraph
+          tree={data?.tree}
+          graph={data?.graph}
+          hops={rawHops}
+          rootAddress={suspectWallet}
+          terminalExchange={data?.terminalExchange}
+          terminalType={data?.terminalType}
+          targetAsset={targetAsset}
+          selectedBranchId={selectedBranchId}
+          selectedNodeId={selectedNodeId}
+          onSelectNode={(node) => setSelectedNodeId(node ? node.id : null)}
+          layoutMode={layoutMode}
+          onLayoutModeChange={(m) => setLayoutMode(m)}
+          height="520px"
+        />
       </div>
 
       {/* 4. Tabbed Forensic Investigation Workbench */}

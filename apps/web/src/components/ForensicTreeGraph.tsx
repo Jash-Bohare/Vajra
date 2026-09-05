@@ -155,6 +155,7 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [internalSelectedNode, setInternalSelectedNode] = useState<ForensicNode | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showRoleMatrix, setShowRoleMatrix] = useState(false);
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [popoverOffset, setPopoverOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -1071,6 +1072,15 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
   const edgeBg = isLight ? '#ffffff' : '#080d1a';
   const edgeBorder = isLight ? '#cbd5e1' : '#1e293b';
 
+  const ROLE_MATRIX_ITEMS = useMemo(() => [
+    { key: 'root', name: 'Suspect Origin', symbol: 'ROOT', color: CATEGORY_COLORS.root.stroke, bg: CATEGORY_COLORS.root.bg },
+    { key: 'exchange', name: 'VASP Exchange Exit', symbol: 'VASP', color: CATEGORY_COLORS.exchange.stroke, bg: CATEGORY_COLORS.exchange.bg },
+    { key: 'intermediary', name: 'Peeling Intermediary', symbol: 'H1 / H2', color: CATEGORY_COLORS.intermediary.stroke, bg: CATEGORY_COLORS.intermediary.bg },
+    { key: 'aggregator', name: 'Mixer / Aggregator', symbol: 'AGG', color: CATEGORY_COLORS.aggregator.stroke, bg: CATEGORY_COLORS.aggregator.bg },
+    { key: 'burner', name: 'Burner / Dust Leaf', symbol: 'LEAF', color: CATEGORY_COLORS.burner.stroke, bg: CATEGORY_COLORS.burner.bg },
+    { key: 'contract_pool', name: 'DEX / Smart Contract', symbol: 'POOL', color: CATEGORY_COLORS.contract_pool.stroke, bg: CATEGORY_COLORS.contract_pool.bg },
+  ], [CATEGORY_COLORS]);
+
   return (
     <div
       ref={containerRef}
@@ -1089,7 +1099,186 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
       onClick={handleCanvasClick}
       onWheel={handleWheel}
     >
-      {/* 1. Top-Right Control Toolbar */}
+      {/* 1. Top-Left Node Role Matrix Button & Floating Legend HUD */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          gap: '6px',
+          zIndex: 30,
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={() => setShowRoleMatrix((prev) => !prev)}
+          title="Toggle Forensic Role Matrix Legend"
+          style={{
+            padding: '4px 10px',
+            backgroundColor: showRoleMatrix
+              ? (isLight ? '#e0f2fe' : 'rgba(6, 182, 212, 0.18)')
+              : (isLight ? '#ffffff' : '#0a1220'),
+            border: showRoleMatrix
+              ? '1px solid var(--accent-cyan)'
+              : '1px solid var(--border-tactical)',
+            borderRadius: '4px',
+            color: showRoleMatrix ? 'var(--accent-cyan)' : 'var(--text-main)',
+            fontSize: '11px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            fontFamily: 'var(--font-headline)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            boxShadow: showRoleMatrix ? '0 0 10px rgba(6, 182, 212, 0.25)' : 'none',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--accent-cyan)' }}>
+            category
+          </span>
+          <span>Role Matrix</span>
+          <span
+            className="material-symbols-outlined"
+            style={{
+              fontSize: '13px',
+              transition: 'transform 0.2s ease',
+              transform: showRoleMatrix ? 'rotate(180deg)' : 'rotate(0deg)',
+              color: 'var(--text-dim)',
+            }}
+          >
+            expand_more
+          </span>
+        </button>
+
+        {/* Floating Compact Role Matrix HUD Popover */}
+        {showRoleMatrix && (
+          <div
+            style={{
+              width: '240px',
+              backgroundColor: isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(7, 13, 22, 0.96)',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid var(--border-tactical)',
+              borderRadius: '6px',
+              padding: '10px 12px',
+              boxShadow: isLight
+                ? '0 8px 24px rgba(0, 0, 0, 0.12)'
+                : '0 8px 28px rgba(0, 0, 0, 0.65)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingBottom: '6px',
+                borderBottom: '1px solid var(--border-tactical)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '13px', color: 'var(--accent-cyan)' }}>
+                  key
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-headline)',
+                    fontSize: '10.5px',
+                    fontWeight: 800,
+                    color: 'var(--text-main)',
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Forensic Node Roles
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRoleMatrix(false)}
+                title="Close"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-dim)',
+                  cursor: 'pointer',
+                  padding: '0 2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>close</span>
+              </button>
+            </div>
+
+            {/* Compact List: Color dot, Name, Symbol */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' }}>
+              {ROLE_MATRIX_ITEMS.map((item) => (
+                <div
+                  key={item.key}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '4px 6px',
+                    borderRadius: '4px',
+                    backgroundColor: isLight ? 'rgba(0, 0, 0, 0.02)' : 'rgba(255, 255, 255, 0.03)',
+                    transition: 'background-color 0.15s ease',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                    <span
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        backgroundColor: item.color,
+                        boxShadow: `0 0 6px ${item.color}`,
+                        display: 'inline-block',
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-headline)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: 'var(--text-main)',
+                      }}
+                    >
+                      {item.name}
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      padding: '1px 6px',
+                      backgroundColor: item.bg,
+                      color: item.color,
+                      border: `1px solid ${item.color}55`,
+                      borderRadius: '3px',
+                      fontSize: '9.5px',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: 800,
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {item.symbol}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 2. Top-Right Control Toolbar */}
       <div
         style={{
           position: 'absolute',
