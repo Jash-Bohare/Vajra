@@ -475,8 +475,10 @@ export async function traceWalletTree(
         const existingNode = visitedGlobal.get(nextKey)!;
         existingNode.isFanIn = true;
         existingNode.inDegree = (existingNode.inDegree || 0) + 1;
-        // ACCUMULATE taint from converging branch (sum-accumulation)
-        existingNode.taintedAmountUsd = (existingNode.taintedAmountUsd || 0) + txUsdVal;
+        // ACCUMULATE decayed taint from converging branch (bounded to root inception)
+        existingNode.taintedAmountUsd = Math.min(rootTaintUsd, (existingNode.taintedAmountUsd || 0) + branchTaintUsd);
+        existingNode.totalReceivedUsd = (existingNode.totalReceivedUsd || 0) + txUsdVal;
+        existingNode.taintPercentage = Math.min(100, Math.round(((existingNode.taintedAmountUsd / (rootTaintUsd || 1)) * 100) * 10) / 10);
 
         // Do NOT re-queue existingNode to prevent infinite loops, but record terminal branch
         const vasp = vaspLookup(nextAddr);
@@ -519,7 +521,9 @@ export async function traceWalletTree(
           inDegree: 1,
           outDegree: 0,
           depth: currentItem.depth + 1,
-          taintedAmountUsd: txUsdVal,
+          taintedAmountUsd: branchTaintUsd,
+          totalReceivedUsd: txUsdVal,
+          taintPercentage: cumulativeTaintPercent,
           walletCategory: 'intermediary',
           hopVelocitySec: undefined,
         };
@@ -557,7 +561,9 @@ export async function traceWalletTree(
         inDegree: 1,
         outDegree: 0,
         depth: currentItem.depth + 1,
-        taintedAmountUsd: txUsdVal,
+        taintedAmountUsd: branchTaintUsd,
+        totalReceivedUsd: txUsdVal,
+        taintPercentage: cumulativeTaintPercent,
         walletCategory,
         hopVelocitySec: undefined,
       };

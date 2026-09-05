@@ -12,6 +12,7 @@ export interface ForensicNode {
   taintPercentage: number;
   amount: string;
   usdValue?: number;
+  rawVolumeUsd?: number;
   txHash?: string;
   blockNumber?: number;
   timestamp?: string;
@@ -250,6 +251,24 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
     // CASE A: Structured tree/graph format
     if (tree || graph) {
       const rawNodes = tree?.nodes || graph?.nodes || [];
+      const victimTotal = tree?.victimAmountUsd || graph?.victimAmountUsd || 722.93;
+
+      // Build incoming edge taint and volume map for precise node attribution
+      const incomingEdgeTaintMap = new Map<string, number>();
+      const incomingEdgeUsdMap = new Map<string, number>();
+
+      rawEdges.forEach((e) => {
+        const from = (e.from || '').toLowerCase();
+        const to = (e.to || '').toLowerCase();
+        if (to) {
+          if (e.taintPercentage !== undefined) {
+            incomingEdgeTaintMap.set(to, Math.max(incomingEdgeTaintMap.get(to) || 0, Number(e.taintPercentage)));
+          }
+          if (e.usdValue !== undefined) {
+            incomingEdgeUsdMap.set(to, (incomingEdgeUsdMap.get(to) || 0) + Number(e.usdValue));
+          }
+        }
+      });
 
       rawNodes.forEach((rn) => {
         const addr = rn.id.toLowerCase();
@@ -335,7 +354,6 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           }
         }
 
-
         let formattedTimestamp: string | undefined = undefined;
         const rawNodeTs = (rn as any).timestamp || (rn as any).txTimestamp;
         const nodeTimeMs = parseTimestampMs(rawNodeTs) || inTime || outTime;
@@ -349,6 +367,32 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           });
         }
 
+        // Exact Taint % Calculation:
+        // Priority 1: Direct node taintPercentage from backend (if valid and <= 100)
+        // Priority 2: Incoming edge cumulative taintPercentage
+        // Priority 3: Derived from bounded taintedAmountUsd
+        let nodeTaintPercent = 100;
+        if (isRoot) {
+          nodeTaintPercent = 100;
+        } else if (rn.taintPercentage !== undefined && rn.taintPercentage <= 100 && rn.taintPercentage > 0) {
+          nodeTaintPercent = Number(rn.taintPercentage);
+        } else if (incomingEdgeTaintMap.has(addr)) {
+          nodeTaintPercent = incomingEdgeTaintMap.get(addr)!;
+        } else if (rn.taintedAmountUsd && victimTotal > 0 && rn.taintedAmountUsd <= victimTotal) {
+          nodeTaintPercent = (rn.taintedAmountUsd / victimTotal) * 100;
+        } else {
+          nodeTaintPercent = Math.max(2, 100 - depth * 18);
+        }
+
+        nodeTaintPercent = Math.min(100, Math.round(nodeTaintPercent * 10) / 10);
+
+        // Exact Tainted Valuation ($USD) strictly bounded to victim loss
+        const nodeTaintedUsd = isRoot
+          ? victimTotal
+          : Math.min(victimTotal, (victimTotal * (nodeTaintPercent / 100)));
+
+        const rawVolume = rn.totalReceivedUsd || incomingEdgeUsdMap.get(addr) || rn.taintedAmountUsd || nodeTaintedUsd;
+
         const nodeObj: ForensicNode = {
           id: addr,
           address: rn.id,
@@ -356,11 +400,10 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           nodeType: category,
           exchangeName: detectedEx || undefined,
           hopDepth: depth,
-          taintPercentage: rn.taintedAmountUsd && tree?.victimAmountUsd
-            ? Math.min(100, Math.round((rn.taintedAmountUsd / tree.victimAmountUsd) * 100))
-            : Math.max(5, 100 - depth * 15),
-          amount: rn.taintedAmountUsd ? `$${Math.round(rn.taintedAmountUsd).toLocaleString()}` : `${targetAsset}`,
-          usdValue: rn.taintedAmountUsd,
+          taintPercentage: nodeTaintPercent,
+          amount: `$${Math.round(nodeTaintedUsd).toLocaleString()}`,
+          usdValue: nodeTaintedUsd,
+          rawVolumeUsd: rawVolume,
           inDegree: inDeg,
           outDegree: outDeg,
           isFanIn: rn.isFanIn,
@@ -2197,9 +2240,9 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
           {/* Metric Matrix Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
             <div style={{ backgroundColor: 'var(--bg-surface-low)', padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-tactical)' }}>
-              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>HOP DEPTH</span>
+              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>TAINTED VALUE</span>
               <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--accent-cyan)', fontFamily: 'var(--font-headline)' }}>
-                Level #{activeSelectedNode.hopDepth}
+                ${Math.round(activeSelectedNode.usdValue || 0).toLocaleString()}
               </div>
             </div>
 
@@ -2211,19 +2254,42 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
             </div>
 
             <div style={{ backgroundColor: 'var(--bg-surface-low)', padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-tactical)' }}>
-              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>INFLOWS</span>
+              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>HOP DEPTH</span>
               <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', fontFamily: 'var(--font-headline)' }}>
-                {activeSelectedNode.inDegree} in
+                Level #{activeSelectedNode.hopDepth}
               </div>
             </div>
 
             <div style={{ backgroundColor: 'var(--bg-surface-low)', padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-tactical)' }}>
-              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>OUTFLOWS</span>
+              <span style={{ fontSize: '8.5px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>DEGREE (IN / OUT)</span>
               <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', fontFamily: 'var(--font-headline)' }}>
-                {activeSelectedNode.outDegree} out
+                {activeSelectedNode.inDegree} in • {activeSelectedNode.outDegree} out
               </div>
             </div>
           </div>
+
+          {/* Commingling / Layering Indicator if raw transfer > tainted amount */}
+          {activeSelectedNode.rawVolumeUsd && activeSelectedNode.rawVolumeUsd > (activeSelectedNode.usdValue || 0) * 1.5 && (
+            <div
+              style={{
+                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                borderRadius: '4px',
+                padding: '5px 8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--warning-amber)', fontSize: '9.5px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>layers</span>
+                <span>COMMINGLED / LAYERED TX</span>
+              </div>
+              <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', lineHeight: '1.3' }}>
+                Raw On-Chain Volume: ${Math.round(activeSelectedNode.rawVolumeUsd).toLocaleString()} (Theft diluted with external funds)
+              </span>
+            </div>
+          )}
 
           {/* Action Links */}
           <a

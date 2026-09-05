@@ -40,6 +40,7 @@ export interface GraphNode {
   totalReceivedUsd?: number;
   depth?: number;
   taintedAmountUsd?: number;
+  taintPercentage?: number;
   /** P1-A: Wallet classification for LEA investigator display */
   walletCategory?: WalletCategory;
   /** P1-A: Time (seconds) between this node receiving and forwarding funds */
