@@ -278,10 +278,11 @@ export const HomePage: React.FC = () => {
         throw new Error(data.error || 'Failed to execute forensic investigation.');
       }
 
-      // Small delay so investigator experiences the high-tech transition before navigating
+      // Instant transition if cached snapshot, or brief 600ms tactical transition for fresh scan
+      const delay = data.isCached ? 150 : 600;
       setTimeout(() => {
         navigate(`/investigations/${data.investigationId}`);
-      }, 1000);
+      }, delay);
     } catch (err: any) {
       console.error('[HomePage] Trace dispatch error:', err);
       setError(err.message || 'Error executing forensic trace. Please verify backend services.');

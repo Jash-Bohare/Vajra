@@ -30,6 +30,36 @@ export const ResultsPage: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState<any>(null);
   const [activeViewMode, setActiveViewMode] = useState<'graph' | 'linear'>('graph');
   const [subpoenaOpen, setSubpoenaOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncLiveOnChain = async () => {
+    if (!data || isSyncing) return;
+    try {
+      setIsSyncing(true);
+      const targetAddr = data.walletAddress || data.rootAddress || (data.tree && data.tree.rootAddress);
+      const res = await fetch('/api/investigations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: targetAddr,
+          targetAsset: data.targetAsset,
+          victimTxHash: data.victimTxHash,
+          victimAmountUsd: data.victimAmountUsd,
+          forceRefresh: true, // Bypass cache and create a new immutable snapshot
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to execute live on-chain sync.');
+      const json = await res.json();
+      if (json.investigationId) {
+        navigate(`/investigations/${json.investigationId}`);
+      }
+    } catch (err: any) {
+      console.error('[Sync On-Chain Error]:', err);
+      alert('Failed to sync live on-chain data: ' + err.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   useEffect(() => {
     async function fetchInvestigation() {
@@ -176,12 +206,14 @@ export const ResultsPage: React.FC = () => {
             CHAIN: <strong style={{ color: 'var(--text-main)' }}>EVM ({targetAsset})</strong>
           </span>
           <button
-            onClick={() => window.location.reload()}
-            className="btn-tactical btn-tactical-ghost"
-            style={{ fontSize: '0.72rem', padding: '0.35rem 0.65rem' }}
+            onClick={handleSyncLiveOnChain}
+            disabled={isSyncing}
+            className="btn-tactical btn-tactical-primary"
+            style={{ fontSize: '0.72rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+            title="Query latest mined on-chain blocks and append new immutable snapshot to session"
           >
-            <RotateCw size={12} />
-            <span>RE-RUN HEURISTICS</span>
+            <RotateCw size={12} className={isSyncing ? 'animate-spin' : ''} />
+            <span>{isSyncing ? 'SYNCING ON-CHAIN...' : 'SYNC LIVE ON-CHAIN'}</span>
           </button>
           <button
             onClick={() => exportInvestigationPdf(data)}

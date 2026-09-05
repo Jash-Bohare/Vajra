@@ -24,11 +24,41 @@ export const AttributionTerminal: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'branches' | 'ledger' | 'playbook' | 'all'>('branches');
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     setCopiedText(label);
     setTimeout(() => setCopiedText(null), 2000);
+  };
+
+  const handleSyncLiveOnChain = async () => {
+    if (!data || isSyncing) return;
+    try {
+      setIsSyncing(true);
+      const targetAddr = data.walletAddress || data.rootAddress || (data.tree && data.tree.rootAddress);
+      const res = await fetch('/api/investigations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: targetAddr,
+          targetAsset: data.targetAsset,
+          victimTxHash: data.victimTxHash,
+          victimAmountUsd: data.victimAmountUsd,
+          forceRefresh: true, // Bypass cache and create a new immutable forensic snapshot
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to execute live on-chain sync.');
+      const json = await res.json();
+      if (json.investigationId) {
+        navigate(`/investigations/${json.investigationId}`);
+      }
+    } catch (err: any) {
+      console.error('[Sync On-Chain Error]:', err);
+      alert('Failed to sync live on-chain data: ' + err.message);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Fetch investigation record by ID from API
@@ -410,6 +440,39 @@ export const AttributionTerminal: React.FC = () => {
               <span>Issue Subpoena</span>
             </button>
           )}
+
+          {/* Sync Live On-Chain Button */}
+          <button
+            onClick={handleSyncLiveOnChain}
+            disabled={isSyncing}
+            style={{
+              padding: '7px 13px',
+              backgroundColor: isLight ? '#f0f9ff' : 'rgba(56, 189, 248, 0.08)',
+              color: 'var(--accent-cyan)',
+              border: '1px solid var(--accent-cyan)',
+              borderRadius: '4px',
+              fontFamily: 'var(--font-headline)',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: isSyncing ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease',
+            }}
+            title="Query latest mined on-chain blocks and generate new forensic snapshot"
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{
+                fontSize: '15px',
+                animation: isSyncing ? 'spin 1s linear infinite' : 'none',
+              }}
+            >
+              sync
+            </span>
+            <span>{isSyncing ? 'Syncing...' : 'Sync Live On-Chain'}</span>
+          </button>
 
           <button
             onClick={handleExportPdf}
