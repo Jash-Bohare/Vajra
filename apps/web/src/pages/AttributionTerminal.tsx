@@ -7,6 +7,7 @@ import { BranchSummaryCard } from '../components/BranchSummaryCard';
 import { InvestigatorActionCard } from '../components/InvestigatorActionCard';
 import { TokenBadge } from '../components/TokenBadge';
 import { useTheme } from '../context/ThemeContext';
+import { extractDiscoveredVasps, DiscoveredVasp, normalizeExchangeName } from '../utils/vaspUtils';
 
 export const AttributionTerminal: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -45,48 +46,58 @@ export const AttributionTerminal: React.FC = () => {
           targetAsset: data.targetAsset,
           victimTxHash: data.victimTxHash,
           victimAmountUsd: data.victimAmountUsd,
-          forceRefresh: true, // Bypass cache and create a new immutable forensic snapshot
+          forceRefresh: true,
         }),
       });
-      if (!res.ok) throw new Error('Failed to execute live on-chain sync.');
-      const json = await res.json();
-      if (json.investigationId) {
-        navigate(`/investigations/${json.investigationId}`);
+
+      if (!res.ok) {
+        throw new Error(`Sync failed with status: ${res.status}`);
+      }
+
+      const syncResult = await res.json();
+      if (syncResult.investigationId) {
+        navigate(`/investigations/${syncResult.investigationId}`);
       }
     } catch (err: any) {
-      console.error('[Sync On-Chain Error]:', err);
-      alert('Failed to sync live on-chain data: ' + err.message);
+      console.error('[AttributionTerminal] Sync Live On-Chain Error:', err);
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Fetch investigation record by ID from API
   useEffect(() => {
+    if (!id) return;
     setLoading(true);
-    setError(null);
+    setLoadingStage('Loading forensic intelligence dossier...');
 
-    if (id) {
-      setLoadingStage('Loading forensic case dossier from database...');
-      fetch(`/api/investigations/${id}`)
-        .then((res) => {
-          if (!res.ok) throw new Error('Investigation record not found in database.');
-          return res.json();
-        })
-        .then((data) => {
-          setInvestigationData(data);
-        })
-        .catch((err) => {
-          console.error('[AttributionTerminal] Load error:', err);
-          setError('Could not load investigation dossier. Please select a case from History.');
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoadingStage('Retrieving most recent investigation from session...');
-      fetch('/api/investigations')
-        .then((res) => res.json())
+    fetch(`/api/investigations/${id}`)
+      .then((res) => {
+        if (!res.ok) {
+          if (res.status === 404) {
+            throw new Error(`Forensic dossier #${id.substring(0, 8)} not found.`);
+          }
+          throw new Error(`Investigation retrieval failed with status ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((payload) => {
+        const fullData = payload.data || payload;
+        setInvestigationData(fullData);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('[AttributionTerminal] Failed to fetch investigation:', err);
+        setError(err.message || 'Investigation dossier not found');
+        setLoading(false);
+      });
+  }, [id]);
+
+  useEffect(() => {
+    if (!id && !loading) {
+      fetch('/api/investigations/history')
+        .then((r) => r.json())
         .then((history) => {
-          if (Array.isArray(history) && history.length > 0 && history[0].id) {
+          if (Array.isArray(history) && history.length > 0) {
             navigate(`/investigations/${history[0].id}`, { replace: true });
           } else {
             navigate('/', { replace: true });
@@ -97,23 +108,31 @@ export const AttributionTerminal: React.FC = () => {
           navigate('/', { replace: true });
         });
     }
-  }, [id, navigate]);
+  }, [id, loading, navigate]);
 
-  // Derived fields
   const data = investigationData;
   const rawHops = data?.hops || [];
   const ethRate = data?.ethPriceUsd || data?.tree?.ethPriceUsd || data?.graph?.ethPriceUsd || 2442.15;
   const targetAsset = data?.targetAsset || 'ETH';
   const suspectWallet = data?.walletAddress || '0x0000000000000000000000000000000000000000';
-  const isExchange = data?.terminalType === 'exchange' || Boolean(data?.terminalExchange);
-  const terminalExName = data?.terminalExchange || (isExchange ? 'Verified VASP Exit' : 'Uncataloged Hot Wallet');
+
+  // Dynamic Multi-VASP Discovery across all branches and nodes
+  const discoveredVasps = useMemo(() => extractDiscoveredVasps(data), [data]);
+  const isExchange = discoveredVasps.length > 0 || data?.terminalType === 'exchange' || Boolean(data?.terminalExchange);
+
+  // Distinct VASP names string
+  const vaspNamesList = useMemo(() => {
+    const names = Array.from(new Set(discoveredVasps.map((v) => v.name)));
+    return names.length > 0
+      ? names.join(', ')
+      : (data?.terminalExchange ? normalizeExchangeName(data.terminalExchange) : (isExchange ? 'Verified VASP Exit' : 'Uncataloged Hot Wallet'));
+  }, [discoveredVasps, data?.terminalExchange, isExchange]);
 
   // Loss and Valuation Calculations
   const rootHop = rawHops[0];
   const rootAmount = rootHop ? (rootHop.tokenAmount || rootHop.amountEth || parseFloat(rootHop.value) || 0) : 0;
   const totalLossUsd = data?.victimAmountUsd || rootHop?.usdValue || (rootAmount > 0 ? Math.round(rootAmount * (targetAsset === 'ETH' ? ethRate : 1)) : 0);
 
-  // Accurate per-edge / per-hop taint map linked from tree / graph data
   const edgeTaintMap = useMemo(() => {
     const map = new Map<string, number>();
     const edges = data?.tree?.edges || data?.graph?.edges || [];
@@ -130,9 +149,7 @@ export const AttributionTerminal: React.FC = () => {
     return map;
   }, [data]);
 
-  // Accurate Target / Selected / Overall Taint and Valuation Resolution
   const valuationMetrics = useMemo(() => {
-    // 1. If a specific node is selected by investigator in the visualizer graph
     if (selectedNodeId) {
       const allNodes: any[] = data?.tree?.nodes || data?.graph?.nodes || [];
       const node = allNodes.find((n: any) => (n.id || '').toLowerCase() === selectedNodeId.toLowerCase());
@@ -152,41 +169,28 @@ export const AttributionTerminal: React.FC = () => {
       }
     }
 
-    // 2. If a Target VASP Exchange is identified (e.g. BingX)
-    if (isExchange) {
-      const branches: any[] = data?.tree?.branches || [];
-      const exBranch = branches.find((b: any) => b.terminalType === 'exchange' || Boolean(b.exchangeName));
-      const allNodes: any[] = data?.tree?.nodes || data?.graph?.nodes || [];
-      const exNode = allNodes.find((n: any) => n.type === 'exchange' || n.walletCategory === 'exchange');
-      
-      let vaspTaint = 0;
-      let vaspUsd = 0;
+    // 2. If Target VASPs are identified (Dynamic across any number of VASPs: Binance, Gate.io, Coinbase, etc.)
+    if (discoveredVasps.length > 0) {
+      const totalVaspUsd = discoveredVasps.reduce((sum, v) => sum + (v.trappedUsd || 0), 0);
+      const totalVaspTaintSum = discoveredVasps.reduce((sum, v) => sum + (v.taintPercentage || 0), 0);
+      const calculatedTaint = totalLossUsd > 0 && totalVaspUsd > 0
+        ? Math.min(100, (totalVaspUsd / totalLossUsd) * 100)
+        : totalVaspTaintSum;
+      const vaspTaint = Math.min(100, Math.max(calculatedTaint, totalVaspTaintSum));
 
-      if (exBranch) {
-        vaspTaint = exBranch.taintPercentage || 0;
-        vaspUsd = exBranch.finalAmountUsd || (totalLossUsd > 0 ? (totalLossUsd * (vaspTaint / 100)) : 0);
-      } else if (exNode) {
-        vaspUsd = exNode.taintedAmountUsd || exNode.totalReceivedUsd || 0;
-        vaspTaint = exNode.taintPercentage || (totalLossUsd > 0 ? (vaspUsd / totalLossUsd) * 100 : 0);
-      }
+      const vaspCount = discoveredVasps.length;
+      const namesPreview = Array.from(new Set(discoveredVasps.map((v) => v.name))).join(', ');
 
-      if (vaspTaint === 0 && totalLossUsd > 0 && vaspUsd > 0) {
-        vaspTaint = (vaspUsd / totalLossUsd) * 100;
-      }
-
-      if (vaspTaint > 0 || vaspUsd > 0) {
-        return {
-          taintPercent: Math.round(vaspTaint * 10) / 10,
-          valuationUsd: Math.round(vaspUsd * 100) / 100,
-          taintHeader: 'Target VASP Taint',
-          valuationHeader: 'VASP Trapped Value',
-          taintSubtext: `${rawHops.length} Traced Hop(s) Discovered`,
-          taintSuffix: 'VASP Taint',
-        };
-      }
+      return {
+        taintPercent: Math.round(vaspTaint * 10) / 10,
+        valuationUsd: Math.round(totalVaspUsd * 100) / 100,
+        taintHeader: vaspCount > 1 ? `Target VASP Taint (${vaspCount} VASPs)` : 'Target VASP Taint',
+        valuationHeader: vaspCount > 1 ? 'Total VASP Trapped Value' : 'VASP Trapped Value',
+        taintSubtext: `${vaspCount} Exchange Endpoint${vaspCount > 1 ? 's' : ''} (${namesPreview})`,
+        taintSuffix: 'VASP Taint',
+      };
     }
 
-    // 3. Overall Inception / Tracked summary across all branches
     return {
       taintPercent: 100,
       valuationUsd: totalLossUsd,
@@ -195,7 +199,7 @@ export const AttributionTerminal: React.FC = () => {
       taintSubtext: `${rawHops.length} Traced Hop(s) Discovered`,
       taintSuffix: 'Residual Taint',
     };
-  }, [selectedNodeId, data, isExchange, totalLossUsd, rawHops.length]);
+  }, [selectedNodeId, data, discoveredVasps, totalLossUsd, rawHops.length]);
 
   const retainedTaint = `${valuationMetrics.taintPercent.toFixed(1)}%`;
   const trappedValuationUsd = valuationMetrics.valuationUsd;
@@ -569,13 +573,25 @@ export const AttributionTerminal: React.FC = () => {
           }}
         >
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Target VASP Attribution
+            {discoveredVasps.length > 1 ? `Target VASPs (${discoveredVasps.length} Discovered)` : 'Target VASP Attribution'}
           </span>
-          <span style={{ fontFamily: 'var(--font-headline)', fontSize: '18px', fontWeight: 800, color: isExchange ? 'var(--success-emerald)' : 'var(--text-muted)' }}>
-            {terminalExName}
+          <span
+            style={{
+              fontFamily: 'var(--font-headline)',
+              fontSize: discoveredVasps.length > 2 ? '15px' : '18px',
+              fontWeight: 800,
+              color: isExchange ? 'var(--success-emerald)' : 'var(--text-muted)',
+              lineHeight: '1.25',
+              wordBreak: 'break-word',
+            }}
+            title={vaspNamesList}
+          >
+            {vaspNamesList}
           </span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: isExchange ? 'var(--success-emerald)' : 'var(--text-dim)' }}>
-            {isExchange ? 'Verified Deposit Endpoint' : 'Inconclusive / Hot Wallet'}
+            {isExchange
+              ? `${discoveredVasps.length || 1} Verified Deposit Endpoint${discoveredVasps.length !== 1 ? 's' : ''}`
+              : 'Inconclusive / Hot Wallet'}
           </span>
         </div>
 
@@ -1001,9 +1017,10 @@ export const AttributionTerminal: React.FC = () => {
           {/* TAB 3: LEA Action Playbook */}
           {isExchange && (activeTab === 'playbook' || activeTab === 'all') && (
             <InvestigatorActionCard
-              exchangeName={data?.terminalExchange || 'Binance'}
+              exchangeName={discoveredVasps[0]?.name || data?.terminalExchange || 'Binance'}
               walletAddress={suspectWallet}
               victimTxHash={data?.victimTxHash || finalHop?.txHash}
+              discoveredVasps={discoveredVasps}
             />
           )}
         </div>
@@ -1013,11 +1030,12 @@ export const AttributionTerminal: React.FC = () => {
       <SubpoenaModal
         isOpen={subpoenaOpen}
         onClose={() => setSubpoenaOpen(false)}
-        exchangeName={data?.terminalExchange || 'Binance'}
+        exchangeName={discoveredVasps[0]?.name || data?.terminalExchange || 'Binance'}
         walletAddress={suspectWallet}
-        terminalAddress={finalHop?.toAddress || suspectWallet}
+        terminalAddress={discoveredVasps[0]?.address || finalHop?.toAddress || suspectWallet}
         victimTxHash={data?.victimTxHash || finalHop?.txHash}
         trackedLossUsd={trappedValuationUsd}
+        discoveredVasps={discoveredVasps}
       />
     </div>
   );

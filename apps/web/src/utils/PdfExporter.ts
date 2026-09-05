@@ -1,130 +1,10 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-
-interface ExchangeInfo {
-  leaPortalUrl: string;
-  leaEmail?: string;
-  leaPortalName: string;
-  responseTimeDays: string;
-  jurisdiction: string;
-  notes: string;
-}
-
-const EXCHANGE_LEA_INFO: Record<string, ExchangeInfo> = {
-  Binance: {
-    leaPortalUrl: 'https://www.binance.com/en/support/law-enforcement',
-    leaPortalName: 'Binance LEA Portal',
-    leaEmail: 'law_enforcement@binance.com',
-    responseTimeDays: '3-7 business days',
-    jurisdiction: 'Cayman Islands / Global',
-    notes: 'Binance cooperates with INTERPOL, CBI, and state cyber cells. Submit formal preservation request first.',
-  },
-  Coinbase: {
-    leaPortalUrl: 'https://www.coinbase.com/legal/law_enforcement',
-    leaPortalName: 'Coinbase Law Enforcement Portal',
-    responseTimeDays: '5-10 business days',
-    jurisdiction: 'United States (SEC regulated)',
-    notes: 'Requires official government email and formal MLA or MLAT request for foreign agencies.',
-  },
-  Kraken: {
-    leaPortalUrl: 'https://www.kraken.com/legal/law-enforcement',
-    leaPortalName: 'Kraken Law Enforcement Portal',
-    leaEmail: 'lawenforcement@kraken.com',
-    responseTimeDays: '5-14 business days',
-    jurisdiction: 'United States',
-    notes: 'Submit signed court order or preservation letter. Kraken has dedicated LEA compliance team.',
-  },
-  OKX: {
-    leaPortalUrl: 'https://www.okx.com/legal/law-enforcement',
-    leaPortalName: 'OKX LEA Request Portal',
-    leaEmail: 'compliance@okx.com',
-    responseTimeDays: '7-14 business days',
-    jurisdiction: 'Seychelles / Dubai',
-    notes: 'OKX requires formal government request letter with case reference number.',
-  },
-  Bybit: {
-    leaPortalUrl: 'https://www.bybit.com/en-US/help-center/article/Law-Enforcement-Requests',
-    leaPortalName: 'Bybit Compliance Portal',
-    leaEmail: 'compliance@bybit.com',
-    responseTimeDays: '5-10 business days',
-    jurisdiction: 'Dubai',
-    notes: 'Submit via official law enforcement portal. Include investigation ID and wallet address evidence.',
-  },
-  KuCoin: {
-    leaPortalUrl: 'https://www.kucoin.com/legal/law-enforcement',
-    leaPortalName: 'KuCoin LEA Portal',
-    leaEmail: 'compliance@kucoin.com',
-    responseTimeDays: '7-14 business days',
-    jurisdiction: 'Seychelles',
-    notes: 'Requires notarized official government request for account freeze.',
-  },
-  'Gate.io': {
-    leaPortalUrl: 'https://www.gate.io/law-enforcement',
-    leaPortalName: 'Gate.io Compliance Portal',
-    leaEmail: 'compliance@gate.io',
-    responseTimeDays: '7-21 business days',
-    jurisdiction: 'Cayman Islands',
-    notes: 'Submit via email with formal LEA letter. Gate.io has slower response cycles for non-US agencies.',
-  },
-  WazirX: {
-    leaPortalUrl: 'https://wazirx.com/legal',
-    leaPortalName: 'WazirX Compliance Contact',
-    leaEmail: 'compliance@wazirx.com',
-    responseTimeDays: '2-5 business days',
-    jurisdiction: 'India (registered entity)',
-    notes: 'Indian jurisdiction. Fastest response for Indian LEA agencies. Integrates with SAHYOG platform.',
-  },
-  CoinDCX: {
-    leaPortalUrl: 'https://coindcx.com/compliance',
-    leaPortalName: 'CoinDCX Compliance Team',
-    leaEmail: 'legal@coindcx.com',
-    responseTimeDays: '2-5 business days',
-    jurisdiction: 'India (registered entity)',
-    notes: 'Indian jurisdiction. Cooperates directly with CBI, ED, and state cyber cells via SAHYOG.',
-  },
-  HTX: {
-    leaPortalUrl: 'https://www.htx.com/legal/law-enforcement',
-    leaPortalName: 'HTX Law Enforcement Portal',
-    leaEmail: 'compliance@htx.com',
-    responseTimeDays: '7-14 business days',
-    jurisdiction: 'Seychelles',
-    notes: 'Formerly Huobi. Submit preservation request before filing formal freeze order.',
-  },
-  Bitfinex: {
-    leaPortalUrl: 'https://www.bitfinex.com/legal/law-enforcement',
-    leaPortalName: 'Bitfinex Compliance Portal',
-    leaEmail: 'legal@bitfinex.com',
-    responseTimeDays: '7-21 business days',
-    jurisdiction: 'British Virgin Islands',
-    notes: 'Requires official government request with judicial authorization.',
-  },
-  Bitstamp: {
-    leaPortalUrl: 'https://www.bitstamp.net/legal/law-enforcement',
-    leaPortalName: 'Bitstamp LEA Portal',
-    leaEmail: 'legal@bitstamp.net',
-    responseTimeDays: '5-10 business days',
-    jurisdiction: 'Luxembourg (EU regulated)',
-    notes: 'EU-regulated exchange. Fastest response for Europol and EU member LEA agencies.',
-  },
-  Gemini: {
-    leaPortalUrl: 'https://www.gemini.com/legal/law-enforcement',
-    leaPortalName: 'Gemini Law Enforcement Portal',
-    leaEmail: 'compliance@gemini.com',
-    responseTimeDays: '5-10 business days',
-    jurisdiction: 'United States (NYDFS licensed)',
-    notes: 'Gemini is NYDFS-regulated. Submit formal preservation requests with court authorization.',
-  },
-  'Crypto.com': {
-    leaPortalUrl: 'https://crypto.com/legal/law-enforcement',
-    leaPortalName: 'Crypto.com LEA Portal',
-    leaEmail: 'compliance@crypto.com',
-    responseTimeDays: '5-14 business days',
-    jurisdiction: 'Singapore / Malta',
-    notes: 'Submit via LEA portal. Include suspect wallet, transaction evidence, and case reference.',
-  },
-};
+import { extractDiscoveredVasps, DiscoveredVasp, EXCHANGE_LEA_INFO, normalizeExchangeName } from './vaspUtils';
 
 export function exportInvestigationPdf(data: any) {
+  if (!data) return;
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -137,8 +17,6 @@ export function exportInvestigationPdf(data: any) {
   const contentWidth = pageWidth - margin * 2;
 
   const suspectWallet = data.walletAddress || '0x0000000000000000000000000000000000000000';
-  const isExchange = data.terminalType === 'exchange' || Boolean(data.terminalExchange);
-  const exchangeName = data.terminalExchange || (isExchange ? 'Verified Exchange' : 'Inconclusive / Hot Wallet');
   const riskLevel = (data.riskLevel || 'HIGH').toUpperCase();
   const riskScore = data.riskScore || (riskLevel === 'HIGH' ? 94 : riskLevel === 'MEDIUM' ? 58 : 22);
   const tree = data.tree || data.graph?.tree;
@@ -156,39 +34,33 @@ export function exportInvestigationPdf(data: any) {
   const merkleHex = Math.abs(hashVal).toString(16).padStart(8, '0');
   const merkleRoot = `0x${merkleHex.substring(0, 4)}...${merkleHex.substring(merkleHex.length - 4)}`.toUpperCase();
 
-  // Valuation and Taint
+  // Dynamic Multi-VASP Extraction & Aggregation
+  const discoveredVasps: DiscoveredVasp[] = extractDiscoveredVasps(data);
+  const isExchange = discoveredVasps.length > 0 || data.terminalType === 'exchange' || Boolean(data.terminalExchange);
+  const vaspCount = discoveredVasps.length;
+  const distinctVaspNames = Array.from(new Set(discoveredVasps.map((v) => v.name)));
+  const vaspSummaryTitle = distinctVaspNames.length > 0
+    ? distinctVaspNames.join(', ')
+    : (data.terminalExchange ? normalizeExchangeName(data.terminalExchange) : (isExchange ? 'Verified VASP Exit' : 'Inconclusive / Hot Wallet'));
+
+  // Valuation and Taint Calculations
   const rootHop = hops[0];
   const rootAmount = rootHop ? (rootHop.tokenAmount || rootHop.amountEth || parseFloat(rootHop.value) || 0) : 0;
   const totalLossUsd = data.victimAmountUsd || tree?.victimAmountUsd || rootHop?.usdValue || (rootAmount > 0 ? Math.round(rootAmount * (targetAsset === 'ETH' ? ethRate : 1)) : 0);
-  // Accurate VASP / Total Valuation & Taint Resolution
+
   let retainedTaintVal = 100;
   let trappedValuationUsd = totalLossUsd;
 
-  if (isExchange) {
-    const branches: any[] = tree?.branches || [];
-    const exBranch = branches.find((b: any) => b.terminalType === 'exchange' || Boolean(b.exchangeName));
-    const allNodes: any[] = tree?.nodes || data.graph?.nodes || [];
-    const exNode = allNodes.find((n: any) => n.type === 'exchange' || n.walletCategory === 'exchange');
+  if (discoveredVasps.length > 0) {
+    const totalVaspUsd = discoveredVasps.reduce((sum, v) => sum + (v.trappedUsd || 0), 0);
+    const totalVaspTaintSum = discoveredVasps.reduce((sum, v) => sum + (v.taintPercentage || 0), 0);
+    const calculatedTaint = totalLossUsd > 0 && totalVaspUsd > 0
+      ? Math.min(100, (totalVaspUsd / totalLossUsd) * 100)
+      : totalVaspTaintSum;
+    const vaspTaint = Math.min(100, Math.max(calculatedTaint, totalVaspTaintSum));
 
-    let vaspTaint = 0;
-    let vaspUsd = 0;
-
-    if (exBranch) {
-      vaspTaint = exBranch.taintPercentage || 0;
-      vaspUsd = exBranch.finalAmountUsd || (totalLossUsd > 0 ? (totalLossUsd * (vaspTaint / 100)) : 0);
-    } else if (exNode) {
-      vaspUsd = exNode.taintedAmountUsd || exNode.totalReceivedUsd || 0;
-      vaspTaint = exNode.taintPercentage || (totalLossUsd > 0 ? (vaspUsd / totalLossUsd) * 100 : 0);
-    }
-
-    if (vaspTaint === 0 && totalLossUsd > 0 && vaspUsd > 0) {
-      vaspTaint = (vaspUsd / totalLossUsd) * 100;
-    }
-
-    if (vaspTaint > 0 || vaspUsd > 0) {
-      retainedTaintVal = Math.round(vaspTaint * 10) / 10;
-      trappedValuationUsd = Math.round(vaspUsd * 100) / 100;
-    }
+    retainedTaintVal = Math.round(vaspTaint * 10) / 10;
+    trappedValuationUsd = Math.round(totalVaspUsd * 100) / 100;
   } else if (tree?.taintCoveragePercent !== undefined) {
     retainedTaintVal = Number(tree.taintCoveragePercent);
   }
@@ -280,22 +152,22 @@ export function exportInvestigationPdf(data: any) {
   doc.setFontSize(6.8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(100, 116, 139);
-  doc.text('TARGET VASP EXIT', c2X + 4.5, y + 5);
+  doc.text(vaspCount > 1 ? `TARGET VASPS (${vaspCount})` : 'TARGET VASP EXIT', c2X + 4.5, y + 5);
 
-  doc.setFontSize(9);
+  doc.setFontSize(vaspSummaryTitle.length > 15 ? 7.8 : 9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(isExchange ? 5 : 71, isExchange ? 150 : 85, isExchange ? 105 : 105);
-  doc.text(exchangeName.substring(0, 16), c2X + 4.5, y + 11.5);
+  doc.text(vaspSummaryTitle.substring(0, 22), c2X + 4.5, y + 11.5);
 
   doc.setFontSize(7);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text(isExchange ? 'Verified Endpoint' : 'Hot Wallet', c2X + 4.5, y + 17.5);
+  doc.text(isExchange ? `${vaspCount || 1} Verified Endpoint${vaspCount !== 1 ? 's' : ''}` : 'Hot Wallet', c2X + 4.5, y + 17.5);
 
   doc.setFontSize(6.2);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139);
-  doc.text(isExchange ? 'Actionable Subpoena' : 'Downstream relay', c2X + 4.5, y + 22.5);
+  doc.text(isExchange ? 'Actionable Subpoenas' : 'Downstream relay', c2X + 4.5, y + 22.5);
 
   // Card 3: Retained Taint Share (Cyan)
   const c3X = margin + (cardW + cardGap) * 2;
@@ -307,7 +179,7 @@ export function exportInvestigationPdf(data: any) {
   doc.setFontSize(6.8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(100, 116, 139);
-  doc.text('RETAINED TAINT', c3X + 4.5, y + 5);
+  doc.text(vaspCount > 1 ? 'TOTAL VASP TAINT' : 'RETAINED TAINT', c3X + 4.5, y + 5);
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
@@ -334,7 +206,7 @@ export function exportInvestigationPdf(data: any) {
   doc.setFontSize(6.8);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(100, 116, 139);
-  doc.text('TRACKED LOSS (USD)', c4X + 4.5, y + 5);
+  doc.text(vaspCount > 1 ? 'TOTAL VASP VALUE' : 'TRACKED VALUE', c4X + 4.5, y + 5);
 
   doc.setFontSize(8.8);
   doc.setFont('helvetica', 'bold');
@@ -426,31 +298,93 @@ export function exportInvestigationPdf(data: any) {
   y = (doc as any).lastAutoTable.finalY + 7;
 
   // -------------------------------------------------------------
-  // 4. SECTION 2: ACTIONABLE INTELLIGENCE & LEA ENFORCEMENT STEPS
+  // 4. SECTION 2: DISCOVERED VASP ATTRIBUTION & ASSET RECOVERY MATRIX
   // -------------------------------------------------------------
-  y = renderSectionHeader('2. ACTIONABLE LAW ENFORCEMENT PLAYBOOK & LEGAL PROCEDURES', y);
+  if (discoveredVasps.length > 0) {
+    if (y > pageHeight - 50) {
+      doc.addPage();
+      y = 16;
+    }
 
-  const exInfo = isExchange ? EXCHANGE_LEA_INFO[exchangeName] : null;
+    y = renderSectionHeader(`2. IDENTIFIED VASP ATTRIBUTION & ASSET RECOVERY MATRIX (${discoveredVasps.length} EXCHANGES)`, y);
+
+    const vaspRows = discoveredVasps.map((v, i) => {
+      const lea = EXCHANGE_LEA_INFO[v.name];
+      const addrShort = v.address ? `${v.address.substring(0, 10)}...${v.address.substring(v.address.length - 8)}` : 'Hot Deposit Endpoint';
+      return [
+        `#${i + 1} ${v.name}`,
+        addrShort,
+        `$${v.trappedUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        `${v.taintPercentage.toFixed(1)}%`,
+        `Hop #${v.hopCount}`,
+        lea?.leaPortalName || `${v.name} Compliance Desk`,
+        lea?.jurisdiction || 'International MLAT',
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      head: [['VASP Entity', 'Target Deposit Address', 'Trapped USD', 'Taint %', 'Depth', 'LEA Contact / Portal', 'Jurisdiction']],
+      body: vaspRows,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [5, 150, 105], // Forest Emerald
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 7.2,
+        cellPadding: 2.2,
+      },
+      styles: {
+        fontSize: 7.2,
+        cellPadding: 2.2,
+        textColor: [15, 23, 42],
+        lineColor: [203, 213, 225],
+        lineWidth: 0.2,
+      },
+      columnStyles: {
+        0: { cellWidth: 26, fontStyle: 'bold' },
+        1: { cellWidth: 44, fontStyle: 'bold' },
+        2: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
+        3: { cellWidth: 16, halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] },
+        4: { cellWidth: 14, halign: 'center' },
+        5: { cellWidth: 34, textColor: [2, 132, 199] },
+        6: { cellWidth: 22 },
+      },
+      margin: { left: margin, right: margin },
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 7;
+  }
+
+  // -------------------------------------------------------------
+  // 5. SECTION 3: ACTIONABLE LAW ENFORCEMENT PLAYBOOK & LEGAL PROCEDURES
+  // -------------------------------------------------------------
+  if (y > pageHeight - 55) {
+    doc.addPage();
+    y = 16;
+  }
+
+  y = renderSectionHeader('3. ACTIONABLE LAW ENFORCEMENT PLAYBOOK & LEGAL PROCEDURES', y);
 
   const leaSteps = [
     [
       'Step 1',
-      'Immediate Preservation Notice',
+      'Immediate Preservation Notice (Sec 91 CrPC / BSA Sec 63)',
       isExchange
-        ? (`Issue formal Preservation Notice to ${exchangeName} compliance team to freeze KYC identity records, IP logs, linked bank accounts, and wallet deposit history.`)
+        ? (`Issue formal Emergency Preservation Notices to compliance teams at ${vaspSummaryTitle} to freeze KYC records, IP access logs, linked bank accounts, and wallet deposit history across all ${discoveredVasps.length || 1} identified endpoints.`)
         : 'Identify intermediate node owners and prepare subpoenas for downstream exchange touchpoints.',
-      isExchange ? (exInfo?.leaEmail ? (`Email: ${exInfo.leaEmail}`) : (exInfo?.leaPortalName || 'LEA Portal')) : 'N/A',
+      isExchange ? (discoveredVasps.map((v) => `${v.name}`).join(', ')) : 'N/A',
     ],
     [
       'Step 2',
       'Judicial Freeze Order (Sec 91 CrPC / BSA Sec 63)',
       'Obtain judicial authorization under Section 91 CrPC / Section 17 PMLA / BSA 2023. Attach this forensic dossier as Annexure A to secure court disclosure order.',
-      exInfo?.jurisdiction || 'Competent Court Jurisdiction',
+      'Competent Court Jurisdiction',
     ],
     [
       'Step 3',
       'MHA SAHYOG Platform Integration',
-      (`Submit formal digital asset freeze request through the MHA SAHYOG Portal (https://sahyog.cybercrime.gov.in) with suspect address ${suspectWallet.substring(0, 10)}... and target VASP ${exchangeName}.`),
+      (`Submit formal digital asset freeze request through the MHA SAHYOG Portal (https://sahyog.cybercrime.gov.in) with suspect address ${suspectWallet.substring(0, 10)}... and target VASPs: ${vaspSummaryTitle}.`),
       'sahyog.cybercrime.gov.in',
     ],
     [
@@ -492,7 +426,7 @@ export function exportInvestigationPdf(data: any) {
   y = (doc as any).lastAutoTable.finalY + 7;
 
   // -------------------------------------------------------------
-  // 5. SECTION 3: MULTI-BRANCH TOPOLOGY BREAKDOWN TABLE
+  // 6. SECTION 4: MULTI-BRANCH TOPOLOGY BREAKDOWN TABLE
   // -------------------------------------------------------------
   if (tree && tree.branches && tree.branches.length > 0) {
     if (y > pageHeight - 55) {
@@ -500,15 +434,15 @@ export function exportInvestigationPdf(data: any) {
       y = 16;
     }
 
-    y = renderSectionHeader('3. MULTI-BRANCH FUND FLOW TOPOLOGY BREAKDOWN', y);
+    y = renderSectionHeader('4. MULTI-BRANCH FUND FLOW TOPOLOGY BREAKDOWN', y);
 
     const branchRows = tree.branches.map((b: any) => {
-      const isEx = b.terminalType === 'exchange';
+      const isEx = b.terminalType === 'exchange' || Boolean(b.exchangeName);
       return [
         b.branchId,
         (`${b.hopCount} Hop${b.hopCount > 1 ? 's' : ''}`),
         b.terminalAddress ? (`${b.terminalAddress.substring(0, 8)}...${b.terminalAddress.substring(34)}`) : 'N/A',
-        isEx ? (`TARGET: ${b.exchangeName || 'Known Exchange'}`) : (b.terminalType === 'peeling_leaf' ? 'Peeling Leaf (< $5)' : 'Uncataloged Hot Wallet'),
+        isEx ? (`TARGET: ${normalizeExchangeName(b.exchangeName)}`) : (b.terminalType === 'peeling_leaf' ? 'Peeling Leaf (< $5)' : 'Uncataloged Hot Wallet'),
         b.finalAmountUsd !== undefined ? (`$${Number(b.finalAmountUsd).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`) : '$0.00',
         (`${Number(b.taintPercentage ?? 0).toFixed(1)}%`),
       ];
@@ -549,20 +483,20 @@ export function exportInvestigationPdf(data: any) {
     doc.setFontSize(7.2);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(71, 85, 105);
-    const summaryStmt = `Forensic Summary: ${Number(tree.taintCoveragePercent || 100).toFixed(1)}% of the initial suspect funds have been traced and accounted for across ${tree.totalBranches || 1} independent fund flow branches (${tree.exchangeBranches || 0} reached verified exchange endpoints).`;
+    const summaryStmt = `Forensic Summary: ${Number(tree.taintCoveragePercent || 100).toFixed(1)}% of the initial suspect funds have been traced and accounted for across ${tree.totalBranches || 1} independent fund flow branches (${tree.exchangeBranches || discoveredVasps.length || 0} reached verified exchange endpoints).`;
     doc.text(summaryStmt, margin, y);
     y += 8;
   }
 
   // -------------------------------------------------------------
-  // 6. SECTION 4: COMPREHENSIVE TRACED ON-CHAIN HOPS LEDGER
+  // 7. SECTION 5: COMPREHENSIVE TRACED ON-CHAIN HOPS LEDGER
   // -------------------------------------------------------------
   if (y > pageHeight - 50) {
     doc.addPage();
     y = 16;
   }
 
-  y = renderSectionHeader(`4. SEQUENTIAL CHAIN OF CUSTODY & ON-CHAIN HOPS LEDGER (${hops.length} TRANSACTIONS)`, y);
+  y = renderSectionHeader(`5. SEQUENTIAL CHAIN OF CUSTODY & ON-CHAIN HOPS LEDGER (${hops.length} TRANSACTIONS)`, y);
 
   if (hops.length > 0) {
     const hopRows = hops.map((h: any, idx: number) => {
@@ -625,7 +559,7 @@ export function exportInvestigationPdf(data: any) {
   }
 
   // -------------------------------------------------------------
-  // 7. SECTION 5: EVIDENTIARY CERTIFICATION & CHAIN OF CUSTODY
+  // 8. SECTION 6: EVIDENTIARY CERTIFICATION & CHAIN OF CUSTODY
   // -------------------------------------------------------------
   if (y > pageHeight - 45) {
     doc.addPage();
@@ -643,7 +577,7 @@ export function exportInvestigationPdf(data: any) {
   doc.setTextColor(15, 23, 42);
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
-  doc.text('5. FORENSIC CERTIFICATE & ELECTRONIC EVIDENCE UNDER SEC 65B / BSA SEC 63', margin + 6, y + 6);
+  doc.text('6. FORENSIC CERTIFICATE & ELECTRONIC EVIDENCE UNDER SEC 65B / BSA SEC 63', margin + 6, y + 6);
 
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
@@ -661,7 +595,7 @@ export function exportInvestigationPdf(data: any) {
   doc.text('Cyber Crime Cell Seal: [  SEAL  ]', margin + 135, y + 28);
 
   // -------------------------------------------------------------
-  // 8. PAGE NUMBERING & FOOTERS ON ALL PAGES
+  // 9. PAGE NUMBERING & FOOTERS ON ALL PAGES
   // -------------------------------------------------------------
   const totalPages = (doc as any).internal.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
