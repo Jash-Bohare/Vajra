@@ -31,7 +31,7 @@ export type WalletCategory = 'burner' | 'intermediary' | 'aggregator' | 'exchang
 
 export interface GraphNode {
   id: string; // wallet address (checksummed)
-  type: 'wallet' | 'exchange' | 'root';
+  type: 'wallet' | 'exchange' | 'root' | 'contract_pool';
   label?: string; // e.g. "Binance Hot Wallet 1"
   isFanOut?: boolean; // True if node has >1 outgoing branch
   isFanIn?: boolean;  // True if node receives from >1 branch
