@@ -20,6 +20,10 @@ import { BranchSummaryCard } from '../components/BranchSummaryCard';
 import { TokenBadge } from '../components/TokenBadge';
 import { SubpoenaModal } from '../components/SubpoenaModal';
 import { exportInvestigationPdf } from '../utils/PdfExporter';
+import { MLRiskScoreCard } from '../components/MLRiskScoreCard';
+import { GraphMetricsCard } from '../components/GraphMetricsCard';
+import { AiNarrativeCard } from '../components/AiNarrativeCard';
+
 
 export const ResultsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -647,8 +651,21 @@ export const ResultsPage: React.FC = () => {
             gap: '1.25rem',
           }}
         >
+          {/* Phase E3: ML Risk Classifier & SHAP Card */}
+          <MLRiskScoreCard
+            score={data.riskScore}
+            mlScore={data.mlScore}
+            fraudProbability={data.fraudProbability}
+            riskLevel={data.riskLevel}
+            confidence={data.confidence}
+            featureImportance={data.featureImportance}
+            mlModelVersion={data.mlModelVersion}
+            mlFallbackUsed={data.mlFallbackUsed}
+          />
+
           {/* VASP Compliance Dossier Card */}
           <div className="surface-card">
+
             <div
               style={{
                 padding: '0.65rem 1rem',
@@ -884,8 +901,30 @@ export const ResultsPage: React.FC = () => {
               </span>
             </div>
           </div>
+
+          {/* Phase E3: Graph Topological Metrics Card */}
+          {data.graphMetrics && (
+            <GraphMetricsCard
+              metrics={data.graphMetrics}
+              rootAddress={data.walletAddress}
+            />
+          )}
         </div>
       </div>
+
+      {/* Phase E3: AI Investigative Case Narrative (Court & FIR Summary) */}
+      <AiNarrativeCard
+        narrative={data.aiNarrative}
+        generatedBy={data.narrativeGeneratedBy || 'template'}
+        investigationData={data}
+        onNarrativeUpdated={(newNarrative, provider) => {
+          setData((prev: any) => ({
+            ...prev,
+            aiNarrative: newNarrative,
+            narrativeGeneratedBy: provider,
+          }));
+        }}
+      />
 
       {/* 4. Multi-Branch Tree Topology (If Tree Exists) */}
       {(data.tree || data.graph?.tree) && (
@@ -895,6 +934,7 @@ export const ResultsPage: React.FC = () => {
           onSelectBranch={(b) => setSelectedBranch(b ? (selectedBranch?.branchId === b.branchId ? null : b) : null)}
         />
       )}
+
 
       {/* 5. Subpoena Modal */}
       <SubpoenaModal

@@ -2,3 +2,14 @@ fastapi>=0.109.0
 uvicorn>=0.27.0
 pydantic>=2.6.0
 pytest>=8.0.0
+
+# Phase E3 additions
+networkx>=3.3             # Graph topological analytics
+xgboost>=2.0.3            # ML risk classifier (gradient boosting)
+scikit-learn>=1.4.2       # Feature scaling, train/test split, evaluation metrics
+shap>=0.45.0              # SHAP explainability for ML feature importance
+joblib>=1.3.2             # Model serialization (.pkl) and parallel processing
+google-generativeai>=0.7.2  # Gemini Flash API (primary LLM)
+python-dotenv>=1.0.0      # Load GEMINI_API_KEY from .env
+numpy>=1.26.0             # Feature vector operations
+pandas>=2.2.0             # Training dataset loading & preprocessing

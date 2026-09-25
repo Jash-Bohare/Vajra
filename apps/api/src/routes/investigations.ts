@@ -236,7 +236,7 @@ investigationsRouter.post(
         risk.reason,
         treeResult.tree.branches[0]?.hopCount || 1,
         {
-          riskScore: risk.score,
+          riskScore: risk.mlScore ?? risk.score,
           riskIndicators: risk.indicators,
           assetsDetected: combinedAssets,
           targetAsset: treeResult.tree.targetAsset || targetAsset || 'ETH',
@@ -258,8 +258,17 @@ investigationsRouter.post(
         terminalExchange: treeResult.terminalExchange,
         riskLevel: risk.riskLevel,
         riskReason: risk.reason,
-        riskScore: risk.score,
+        riskScore: risk.mlScore ?? risk.score,
         riskIndicators: risk.indicators,
+        graphMetrics: risk.graphMetrics,
+        mlScore: risk.mlScore,
+        fraudProbability: risk.fraudProbability,
+        confidence: risk.confidence,
+        featureImportance: risk.featureImportance,
+        mlModelVersion: risk.mlModelVersion,
+        mlFallbackUsed: risk.mlFallbackUsed,
+        aiNarrative: risk.aiNarrative,
+        narrativeGeneratedBy: risk.narrativeGeneratedBy,
         assetsDetected: combinedAssets,
         targetAsset: treeResult.tree.targetAsset || targetAsset || 'ETH',
         victimTxHash: treeResult.tree.victimTxHash,
@@ -277,6 +286,7 @@ investigationsRouter.post(
         investigationId,
         status: 'completed',
       });
+
     } catch (err: any) {
       console.error('[API] Investigation error:', err.message);
       return res.status(500).json({ error: 'Failed to complete wallet tree investigation.' });
@@ -339,6 +349,15 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
       ethPriceUsd: memRecord.ethPriceUsd || dbRecord.ethPriceUsd,
       riskScore: memRecord.riskScore || dbRecord.riskScore,
       riskIndicators: memRecord.riskIndicators || dbRecord.riskIndicators,
+      graphMetrics: memRecord.graphMetrics || dbRecord.graphMetrics,
+      mlScore: memRecord.mlScore || dbRecord.mlScore,
+      fraudProbability: memRecord.fraudProbability || dbRecord.fraudProbability,
+      confidence: memRecord.confidence || dbRecord.confidence,
+      featureImportance: memRecord.featureImportance || dbRecord.featureImportance,
+      mlModelVersion: memRecord.mlModelVersion || dbRecord.mlModelVersion,
+      mlFallbackUsed: memRecord.mlFallbackUsed || dbRecord.mlFallbackUsed,
+      aiNarrative: memRecord.aiNarrative || dbRecord.aiNarrative,
+      narrativeGeneratedBy: memRecord.narrativeGeneratedBy || dbRecord.narrativeGeneratedBy,
       graph: memRecord.graph || dbRecord.graph,
       tree: memRecord.tree || dbRecord.tree,
     };
@@ -367,6 +386,15 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
     riskReason: record.riskReason,
     riskScore: record.riskScore,
     riskIndicators: record.riskIndicators,
+    graphMetrics: record.graphMetrics,
+    mlScore: record.mlScore,
+    fraudProbability: record.fraudProbability,
+    confidence: record.confidence,
+    featureImportance: record.featureImportance,
+    mlModelVersion: record.mlModelVersion,
+    mlFallbackUsed: record.mlFallbackUsed,
+    aiNarrative: record.aiNarrative,
+    narrativeGeneratedBy: record.narrativeGeneratedBy,
     assetsDetected: record.assetsDetected || record.graph?.assetsDetected || ['ETH'],
     targetAsset: record.targetAsset || record.graph?.targetAsset,
     victimTxHash: record.victimTxHash,
@@ -381,6 +409,44 @@ investigationsRouter.get('/:id', async (req: Request, res: Response) => {
     completedAt: record.completedAt,
   });
 });
+
+/**
+ * POST /api/investigations/narrative/regenerate
+ * Re-generates investigative AI summary on demand
+ */
+investigationsRouter.post('/narrative/regenerate', async (req: Request, res: Response) => {
+  try {
+    const { walletAddress, traceHops, graphMetrics, mlScore, riskLevel, topIndicators, victimTxHash, victimAmountUsd, targetAsset } = req.body;
+
+    const payload = {
+      walletAddress,
+      traceHops: traceHops || [],
+      graphMetrics: graphMetrics || {},
+      mlScore: mlScore || 0,
+      riskLevel: riskLevel || 'low',
+      topIndicators: topIndicators || [],
+      victimTxHash,
+      victimAmountUsd: victimAmountUsd || 0,
+      targetAsset: targetAsset || 'ETH',
+    };
+
+    const response = await fetch(`${config.riskServiceUrl}/risk/narrative`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      return res.status(502).json({ error: 'Risk narrative service failed' });
+    }
+
+    const data = await response.json();
+    return res.status(200).json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to regenerate narrative', message: err.message });
+  }
+});
+
 
 /**
  * GET /api/investigations/:id/report (Doc 03 Section 6)
