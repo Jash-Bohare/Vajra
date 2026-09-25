@@ -43,8 +43,8 @@ export const TacticalSidebar: React.FC = () => {
   const navItems = [
     {
       label: 'New Investigation Intake',
-      path: '/',
-      exact: true,
+      path: '/intake',
+      exact: false,
       icon: 'radar',
     },
     {
@@ -92,9 +92,10 @@ export const TacticalSidebar: React.FC = () => {
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 8px' }}>
           {navItems.map((item) => {
-            const isActive = item.exact
-              ? location.pathname === '/'
-              : location.pathname.startsWith(item.path);
+            const isActive =
+              item.path === '/intake'
+                ? location.pathname === '/intake' || location.pathname === '/terminal'
+                : location.pathname.startsWith(item.path);
 
             return (
               <NavLink

@@ -1,14 +1,21 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { AttributionTerminal } from './pages/AttributionTerminal';
 import { HomePage } from './pages/HomePage';
 import { HistoryPage } from './pages/HistoryPage';
+import { LandingPage } from './pages/LandingPage';
 import { TacticalHeader } from './components/layout/TacticalHeader';
 import { TacticalSidebar } from './components/layout/TacticalSidebar';
 
 const AppLayout: React.FC = () => {
   const { theme } = useTheme();
+  const location = useLocation();
+
+  // Root route renders the Sovereign Landing & Command Portal
+  if (location.pathname === '/') {
+    return <LandingPage />;
+  }
 
   return (
     <div
@@ -34,10 +41,10 @@ const AppLayout: React.FC = () => {
           }}
         >
           <Routes>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/terminal" element={<HomePage />} />
+            <Route path="/intake" element={<HomePage />} />
             <Route path="/investigations/:id" element={<AttributionTerminal />} />
             <Route path="/investigations/:id/progress" element={<AttributionTerminal />} />
-            <Route path="/terminal" element={<Navigate to="/" replace />} />
             <Route path="/history" element={<HistoryPage />} />
             {/* Redirect legacy redundant routes to /history */}
             <Route path="/dossier" element={<Navigate to="/history" replace />} />
