@@ -498,3 +498,13 @@ body {
   }
 }
 
+@media (max-width: 540px) {
+  .graph-btn-label {
+    display: none !important;
+  }
+  
+  .graph-controls-header-bar {
+    gap: 4px !important;
+  }
+}
+

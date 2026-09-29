@@ -1517,367 +1517,377 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
       onMouseDown={handleCanvasMouseDown}
       onClick={handleCanvasClick}
     >
-      {/* 1. Top-Left Node Role Matrix Button & Floating Legend HUD */}
+      {/* 1. Responsive Graph Controls Bar (Role Matrix + Layout + Zoom + Fit) */}
       <div
+        className="graph-controls-header-bar"
         style={{
           position: 'absolute',
-          top: '12px',
-          left: '12px',
+          top: '10px',
+          left: '10px',
+          right: '10px',
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'flex-start',
-          gap: '6px',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px',
           zIndex: 30,
+          pointerEvents: 'none',
         }}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <button
-          type="button"
-          onClick={() => setShowRoleMatrix((prev) => !prev)}
-          title="Toggle Forensic Role Matrix Legend"
-          style={{
-            padding: '4px 10px',
-            backgroundColor: showRoleMatrix
-              ? (isLight ? '#e0f2fe' : 'rgba(6, 182, 212, 0.18)')
-              : (isLight ? '#ffffff' : '#0a1220'),
-            border: showRoleMatrix
-              ? '1px solid var(--accent-cyan)'
-              : '1px solid var(--border-tactical)',
-            borderRadius: '4px',
-            color: showRoleMatrix ? 'var(--accent-cyan)' : 'var(--text-main)',
-            fontSize: '11px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-            fontFamily: 'var(--font-headline)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            boxShadow: showRoleMatrix ? '0 0 10px rgba(6, 182, 212, 0.25)' : 'none',
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--accent-cyan)' }}>
-            category
-          </span>
-          <span>Role Matrix</span>
-          <span
-            className="material-symbols-outlined"
+        {/* Left: Role Matrix Button & Floating Legend HUD */}
+        <div style={{ position: 'relative', pointerEvents: 'auto' }}>
+          <button
+            type="button"
+            onClick={() => setShowRoleMatrix((prev) => !prev)}
+            title="Toggle Forensic Role Matrix Legend"
             style={{
-              fontSize: '13px',
-              transition: 'transform 0.2s ease',
-              transform: showRoleMatrix ? 'rotate(180deg)' : 'rotate(0deg)',
-              color: 'var(--text-dim)',
-            }}
-          >
-            expand_more
-          </span>
-        </button>
-
-        {/* Floating Compact Role Matrix HUD Popover */}
-        {showRoleMatrix && (
-          <div
-            style={{
-              width: '240px',
-              backgroundColor: isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(7, 13, 22, 0.96)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid var(--border-tactical)',
-              borderRadius: '6px',
-              padding: '10px 12px',
-              boxShadow: isLight
-                ? '0 8px 24px rgba(0, 0, 0, 0.12)'
-                : '0 8px 28px rgba(0, 0, 0, 0.65)',
+              padding: '4px 10px',
+              backgroundColor: showRoleMatrix
+                ? (isLight ? '#e0f2fe' : 'rgba(6, 182, 212, 0.18)')
+                : (isLight ? '#ffffff' : '#0a1220'),
+              border: showRoleMatrix
+                ? '1px solid var(--accent-cyan)'
+                : '1px solid var(--border-tactical)',
+              borderRadius: '4px',
+              color: showRoleMatrix ? 'var(--accent-cyan)' : 'var(--text-main)',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              fontFamily: 'var(--font-headline)',
               display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
+              alignItems: 'center',
+              gap: '5px',
+              boxShadow: showRoleMatrix ? '0 0 10px rgba(6, 182, 212, 0.25)' : 'none',
             }}
           >
-            <div
+            <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--accent-cyan)' }}>
+              category
+            </span>
+            <span>Role Matrix</span>
+            <span
+              className="material-symbols-outlined"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingBottom: '6px',
-                borderBottom: '1px solid var(--border-tactical)',
+                fontSize: '13px',
+                transition: 'transform 0.2s ease',
+                transform: showRoleMatrix ? 'rotate(180deg)' : 'rotate(0deg)',
+                color: 'var(--text-dim)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '13px', color: 'var(--accent-cyan)' }}>
-                  key
-                </span>
-                <span
-                  style={{
-                    fontFamily: 'var(--font-headline)',
-                    fontSize: '10.5px',
-                    fontWeight: 800,
-                    color: 'var(--text-main)',
-                    letterSpacing: '0.05em',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Forensic Node Roles
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowRoleMatrix(false)}
-                title="Close"
+              expand_more
+            </span>
+          </button>
+
+          {/* Floating Compact Role Matrix HUD Popover */}
+          {showRoleMatrix && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                left: 0,
+                width: '240px',
+                maxWidth: 'calc(100vw - 36px)',
+                backgroundColor: isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(7, 13, 22, 0.96)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid var(--border-tactical)',
+                borderRadius: '6px',
+                padding: '10px 12px',
+                boxShadow: isLight
+                  ? '0 8px 24px rgba(0, 0, 0, 0.12)'
+                  : '0 8px 28px rgba(0, 0, 0, 0.65)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                zIndex: 40,
+              }}
+            >
+              <div
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--text-dim)',
-                  cursor: 'pointer',
-                  padding: '0 2px',
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingBottom: '6px',
+                  borderBottom: '1px solid var(--border-tactical)',
                 }}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>close</span>
-              </button>
-            </div>
-
-            {/* Compact List: Color dot, Name, Symbol */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' }}>
-              {ROLE_MATRIX_ITEMS.map((item) => (
-                <div
-                  key={item.key}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '4px 6px',
-                    borderRadius: '4px',
-                    backgroundColor: isLight ? 'rgba(0, 0, 0, 0.02)' : 'rgba(255, 255, 255, 0.03)',
-                    transition: 'background-color 0.15s ease',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                    <span
-                      style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        backgroundColor: item.color,
-                        boxShadow: `0 0 6px ${item.color}`,
-                        display: 'inline-block',
-                        flexShrink: 0,
-                      }}
-                    />
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-headline)',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        color: 'var(--text-main)',
-                      }}
-                    >
-                      {item.name}
-                    </span>
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: '13px', color: 'var(--accent-cyan)' }}>
+                    key
+                  </span>
                   <span
                     style={{
-                      padding: '1px 6px',
-                      backgroundColor: item.bg,
-                      color: item.color,
-                      border: `1px solid ${item.color}55`,
-                      borderRadius: '3px',
-                      fontSize: '9.5px',
-                      fontFamily: 'var(--font-mono)',
+                      fontFamily: 'var(--font-headline)',
+                      fontSize: '10.5px',
                       fontWeight: 800,
-                      letterSpacing: '0.02em',
+                      color: 'var(--text-main)',
+                      letterSpacing: '0.05em',
+                      textTransform: 'uppercase',
                     }}
                   >
-                    {item.symbol}
+                    Forensic Node Roles
                   </span>
                 </div>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setShowRoleMatrix(false)}
+                  title="Close"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-dim)',
+                    cursor: 'pointer',
+                    padding: '0 2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>close</span>
+                </button>
+              </div>
+
+              {/* Compact List: Color dot, Name, Symbol */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' }}>
+                {ROLE_MATRIX_ITEMS.map((item) => (
+                  <div
+                    key={item.key}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '4px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: isLight ? 'rgba(0, 0, 0, 0.02)' : 'rgba(255, 255, 255, 0.03)',
+                      transition: 'background-color 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                      <span
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          backgroundColor: item.color,
+                          boxShadow: `0 0 6px ${item.color}`,
+                          display: 'inline-block',
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-headline)',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: 'var(--text-main)',
+                        }}
+                      >
+                        {item.name}
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        padding: '1px 6px',
+                        backgroundColor: item.bg,
+                        color: item.color,
+                        border: `1px solid ${item.color}55`,
+                        borderRadius: '3px',
+                        fontSize: '9.5px',
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 800,
+                        letterSpacing: '0.02em',
+                      }}
+                    >
+                      {item.symbol}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* 2. Top-Right Control Toolbar */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '12px',
-          right: '12px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          zIndex: 25,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Layout Switcher */}
-        <div
-          style={{
-            display: 'inline-flex',
-            backgroundColor: isLight ? '#ffffff' : '#0a1220',
-            border: '1px solid var(--border-tactical)',
-            borderRadius: '4px',
-            padding: '2px',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => handleToggleLayout('dag')}
-            title="Horizontal Straight-Flow DAG View"
-            style={{
-              padding: '4px 9px',
-              backgroundColor: layoutMode === 'dag' ? 'var(--accent-cyan)' : 'transparent',
-              color: layoutMode === 'dag' ? '#ffffff' : 'var(--text-muted)',
-              border: 'none',
-              borderRadius: '3px',
-              fontSize: '11px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontFamily: 'var(--font-headline)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>schema</span>
-            <span>DAG Flow</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleToggleLayout('tree')}
-            title="Top-Down Hierarchical Tree View"
-            style={{
-              padding: '4px 9px',
-              backgroundColor: layoutMode === 'tree' ? 'var(--accent-cyan)' : 'transparent',
-              color: layoutMode === 'tree' ? '#ffffff' : 'var(--text-muted)',
-              border: 'none',
-              borderRadius: '3px',
-              fontSize: '11px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontFamily: 'var(--font-headline)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>account_tree</span>
-            <span>Tree View</span>
-          </button>
+          )}
         </div>
 
-        {/* Zoom In & Out Step Controls */}
+        {/* Right: Graph Action Controls (Layout Switcher, Zoom, Fit, Reset) */}
         <div
+          className="graph-action-controls-group"
           style={{
-            display: 'inline-flex',
-            backgroundColor: isLight ? '#ffffff' : '#0a1220',
-            border: '1px solid var(--border-tactical)',
-            borderRadius: '4px',
-            padding: '2px',
-            alignItems: 'center',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => handleStepZoom(0.85)}
-            title="Zoom Out"
-            style={{
-              padding: '4px 6px',
-              backgroundColor: 'transparent',
-              color: 'var(--text-main)',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              transition: 'background-color 0.15s ease',
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>remove</span>
-          </button>
-          <span
-            style={{
-              fontSize: '10.5px',
-              fontFamily: 'var(--font-mono)',
-              fontWeight: 700,
-              color: 'var(--text-dim)',
-              padding: '0 4px',
-              minWidth: '34px',
-              textAlign: 'center',
-              userSelect: 'none',
-            }}
-          >
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            type="button"
-            onClick={() => handleStepZoom(1.18)}
-            title="Zoom In"
-            style={{
-              padding: '4px 6px',
-              backgroundColor: 'transparent',
-              color: 'var(--text-main)',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              transition: 'background-color 0.15s ease',
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>add</span>
-          </button>
-        </div>
-
-        {/* Fit Canvas */}
-        <button
-          type="button"
-          onClick={fitToCurrentBounds}
-          title="Center and fit canvas view"
-          style={{
-            padding: '4px 9px',
-            backgroundColor: isLight ? '#ffffff' : '#0a1220',
-            border: '1px solid var(--border-tactical)',
-            borderRadius: '4px',
-            color: 'var(--text-main)',
-            fontSize: '11px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-            fontFamily: 'var(--font-headline)',
             display: 'flex',
             alignItems: 'center',
-            gap: '3px',
+            flexWrap: 'wrap',
+            gap: '6px',
+            pointerEvents: 'auto',
           }}
         >
-          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>fit_screen</span>
-          <span>Fit</span>
-        </button>
+          {/* Layout Switcher */}
+          <div
+            style={{
+              display: 'inline-flex',
+              backgroundColor: isLight ? '#ffffff' : '#0a1220',
+              border: '1px solid var(--border-tactical)',
+              borderRadius: '4px',
+              padding: '2px',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => handleToggleLayout('dag')}
+              title="Horizontal Straight-Flow DAG View"
+              style={{
+                padding: '4px 8px',
+                backgroundColor: layoutMode === 'dag' ? 'var(--accent-cyan)' : 'transparent',
+                color: layoutMode === 'dag' ? '#ffffff' : 'var(--text-muted)',
+                border: 'none',
+                borderRadius: '3px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontFamily: 'var(--font-headline)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>schema</span>
+              <span className="graph-btn-label">DAG Flow</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleLayout('tree')}
+              title="Top-Down Hierarchical Tree View"
+              style={{
+                padding: '4px 8px',
+                backgroundColor: layoutMode === 'tree' ? 'var(--accent-cyan)' : 'transparent',
+                color: layoutMode === 'tree' ? '#ffffff' : 'var(--text-muted)',
+                border: 'none',
+                borderRadius: '3px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontFamily: 'var(--font-headline)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>account_tree</span>
+              <span className="graph-btn-label">Tree View</span>
+            </button>
+          </div>
 
-        {Object.keys(nodePositions).length > 0 && (
+          {/* Zoom In & Out Step Controls */}
+          <div
+            style={{
+              display: 'inline-flex',
+              backgroundColor: isLight ? '#ffffff' : '#0a1220',
+              border: '1px solid var(--border-tactical)',
+              borderRadius: '4px',
+              padding: '2px',
+              alignItems: 'center',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => handleStepZoom(0.85)}
+              title="Zoom Out"
+              style={{
+                padding: '4px 6px',
+                backgroundColor: 'transparent',
+                color: 'var(--text-main)',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'background-color 0.15s ease',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>remove</span>
+            </button>
+            <span
+              style={{
+                fontSize: '10.5px',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 700,
+                color: 'var(--text-dim)',
+                padding: '0 4px',
+                minWidth: '32px',
+                textAlign: 'center',
+                userSelect: 'none',
+              }}
+            >
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => handleStepZoom(1.18)}
+              title="Zoom In"
+              style={{
+                padding: '4px 6px',
+                backgroundColor: 'transparent',
+                color: 'var(--text-main)',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'background-color 0.15s ease',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>add</span>
+            </button>
+          </div>
+
+          {/* Fit Canvas */}
           <button
             type="button"
-            onClick={() => {
-              setNodePositions({});
-              setTimeout(fitToCurrentBounds, 50);
-            }}
+            onClick={fitToCurrentBounds}
+            title="Center and fit canvas view"
             style={{
               padding: '4px 8px',
-              backgroundColor: 'var(--bg-surface-low)',
-              border: '1px solid var(--accent-cyan)',
+              backgroundColor: isLight ? '#ffffff' : '#0a1220',
+              border: '1px solid var(--border-tactical)',
               borderRadius: '4px',
-              color: 'var(--accent-cyan)',
-              fontSize: '10.5px',
+              color: 'var(--text-main)',
+              fontSize: '11px',
               fontWeight: 700,
               cursor: 'pointer',
               transition: 'all 0.15s ease',
               fontFamily: 'var(--font-headline)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
             }}
           >
-            Reset
+            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>fit_screen</span>
+            <span className="graph-btn-label">Fit</span>
           </button>
-        )}
+
+          {Object.keys(nodePositions).length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setNodePositions({});
+                setTimeout(fitToCurrentBounds, 50);
+              }}
+              style={{
+                padding: '4px 8px',
+                backgroundColor: 'var(--bg-surface-low)',
+                border: '1px solid var(--accent-cyan)',
+                borderRadius: '4px',
+                color: 'var(--accent-cyan)',
+                fontSize: '10.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                fontFamily: 'var(--font-headline)',
+              }}
+            >
+              Reset
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 2. Interactive SVG Canvas */}
