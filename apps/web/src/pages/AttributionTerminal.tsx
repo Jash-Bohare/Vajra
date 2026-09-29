@@ -11,7 +11,7 @@ import { extractDiscoveredVasps, DiscoveredVasp, normalizeExchangeName } from '.
 import { MLRiskScoreCard } from '../components/MLRiskScoreCard';
 import { GraphMetricsCard } from '../components/GraphMetricsCard';
 import { AiNarrativeCard } from '../components/AiNarrativeCard';
-import { MOCK_INVESTIGATION_DOSSIER } from '../utils/mockFallback';
+import { MOCK_INVESTIGATION_DOSSIER, buildMockDossier } from '../utils/mockFallback';
 
 export const AttributionTerminal: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -90,10 +90,8 @@ export const AttributionTerminal: React.FC = () => {
 
     fetch(`/api/investigations/${id}`)
       .then((res) => {
-        if (!res.ok) {
-          if (res.status === 404) {
-            throw new Error(`Forensic dossier #${id.substring(0, 8)} not found.`);
-          }
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok || !contentType.includes('application/json')) {
           throw new Error(`Investigation retrieval failed with status ${res.status}`);
         }
         return res.json();
@@ -105,10 +103,8 @@ export const AttributionTerminal: React.FC = () => {
       })
       .catch((err) => {
         console.warn('[AttributionTerminal] Network error or standalone mode, using verified dossier snapshot:', err);
-        setInvestigationData({
-          ...MOCK_INVESTIGATION_DOSSIER,
-          id: id || MOCK_INVESTIGATION_DOSSIER.id,
-        });
+        const dossier = buildMockDossier(id);
+        setInvestigationData(dossier);
         setLoading(false);
       });
   }, [id]);

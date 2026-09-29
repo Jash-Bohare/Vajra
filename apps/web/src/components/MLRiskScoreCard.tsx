@@ -206,15 +206,17 @@ export const MLRiskScoreCard: React.FC<MLRiskScoreCardProps> = ({
           {featureImportance && featureImportance.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               {featureImportance.slice(0, 5).map((item, idx) => {
-                const shapVal = item.shapValue !== undefined ? item.shapValue : (item as any).shap_value ?? 0;
-                const rawVal = item.rawValue !== undefined ? item.rawValue : (item as any).raw_value ?? 0;
-                const isRiskInc = item.direction === 'increases_risk' || shapVal > 0;
+                const numShap = typeof item.shapValue === 'number' ? item.shapValue : (typeof (item as any).shap_value === 'number' ? (item as any).shap_value : 0);
+                const rawVal = item.rawValue !== undefined ? item.rawValue : ((item as any).raw_value !== undefined ? (item as any).raw_value : (item as any).value ?? 0);
+                const isRiskInc = item.direction === 'increases_risk' || numShap > 0;
                 const barColor = isRiskInc ? 'var(--danger-crimson, #ef4444)' : 'var(--success-emerald, #10b981)';
-                const barWidth = Math.min(Math.abs(shapVal) * 80 + 10, 100);
+                const barWidth = Math.min(Math.abs(numShap) * 4 + 10, 100);
+
+                const formattedRaw = typeof rawVal === 'number' ? rawVal.toLocaleString() : String(rawVal);
 
                 return (
                   <div
-                    key={item.feature + '_' + idx}
+                    key={(item.feature || 'feat') + '_' + idx}
                     style={{
                       backgroundColor: 'var(--bg-surface-low)',
                       padding: '0.4rem 0.6rem',
@@ -227,11 +229,11 @@ export const MLRiskScoreCard: React.FC<MLRiskScoreCardProps> = ({
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span className="font-mono-data-xs" style={{ color: 'var(--text-main)', fontWeight: 600 }}>
-                        {item.feature.replace(/_/g, ' ')}
+                        {(item.feature || '').replace(/_/g, ' ')}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span className="font-mono-data-xs" style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>
-                          val: {rawVal.toLocaleString()}
+                          val: {formattedRaw}
                         </span>
                         <span
                           className="font-mono-data-xs"
@@ -241,7 +243,7 @@ export const MLRiskScoreCard: React.FC<MLRiskScoreCardProps> = ({
                             fontSize: '0.7rem',
                           }}
                         >
-                          {isRiskInc ? `+${shapVal.toFixed(2)}` : `${shapVal.toFixed(2)}`}
+                          {isRiskInc ? `+${numShap.toFixed(2)}` : `${numShap.toFixed(2)}`}
                         </span>
                       </div>
                     </div>

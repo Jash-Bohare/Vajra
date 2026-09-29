@@ -299,8 +299,8 @@ export const HomePage: React.FC = () => {
     } catch (err: any) {
       console.warn('[HomePage] Live backend unavailable in preview, navigating to verified dossier:', err);
       setTimeout(() => {
-        navigate('/investigations/dfd6ee90-60cb-41c2-985f-5e67b3c6c32f');
-      }, 400);
+        navigate(`/investigations/${cleanAddress}`);
+      }, 350);
     }
   };
 
@@ -440,12 +440,13 @@ export const HomePage: React.FC = () => {
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', minWidth: 0 }}>
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   flex: 1,
+                  minWidth: 0,
                   backgroundColor: 'var(--bg-surface-low)',
                   border: `1px solid ${isValidAddress ? 'var(--accent-cyan)' : 'var(--border-tactical)'}`,
                   borderRadius: '4px',
@@ -454,7 +455,7 @@ export const HomePage: React.FC = () => {
                   transition: 'border-color 0.15s ease',
                 }}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px', color: isValidAddress ? 'var(--accent-cyan)' : 'var(--text-dim)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '20px', color: isValidAddress ? 'var(--accent-cyan)' : 'var(--text-dim)', flexShrink: 0 }}>
                   fingerprint
                 </span>
                 <input
@@ -466,6 +467,7 @@ export const HomePage: React.FC = () => {
                   disabled={loading || scanning}
                   style={{
                     flex: 1,
+                    minWidth: 0,
                     padding: '10px 0',
                     backgroundColor: 'transparent',
                     border: 'none',
@@ -493,6 +495,7 @@ export const HomePage: React.FC = () => {
                       padding: '4px',
                       display: 'flex',
                       alignItems: 'center',
+                      flexShrink: 0,
                     }}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>close</span>
@@ -517,6 +520,7 @@ export const HomePage: React.FC = () => {
                   alignItems: 'center',
                   gap: '6px',
                   whiteSpace: 'nowrap',
+                  flexShrink: 0,
                   transition: 'all 0.15s ease',
                 }}
               >
@@ -598,12 +602,13 @@ export const HomePage: React.FC = () => {
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', minWidth: 0 }}>
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   flex: 1,
+                  minWidth: 0,
                   backgroundColor: 'var(--bg-surface-low)',
                   border: `1px solid ${isValidTxHash ? 'var(--accent-cyan)' : 'var(--border-tactical)'}`,
                   borderRadius: '4px',
@@ -612,7 +617,7 @@ export const HomePage: React.FC = () => {
                   transition: 'border-color 0.15s ease',
                 }}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '20px', color: isValidTxHash ? 'var(--accent-cyan)' : 'var(--text-dim)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '20px', color: isValidTxHash ? 'var(--accent-cyan)' : 'var(--text-dim)', flexShrink: 0 }}>
                   schedule
                 </span>
                 <input
@@ -624,6 +629,7 @@ export const HomePage: React.FC = () => {
                   disabled={loading || scanning}
                   style={{
                     flex: 1,
+                    minWidth: 0,
                     padding: '10px 0',
                     backgroundColor: 'transparent',
                     border: 'none',
@@ -646,6 +652,7 @@ export const HomePage: React.FC = () => {
                       padding: '4px',
                       display: 'flex',
                       alignItems: 'center',
+                      flexShrink: 0,
                     }}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>close</span>
@@ -670,6 +677,7 @@ export const HomePage: React.FC = () => {
                   alignItems: 'center',
                   gap: '6px',
                   whiteSpace: 'nowrap',
+                  flexShrink: 0,
                   transition: 'all 0.15s ease',
                 }}
               >
