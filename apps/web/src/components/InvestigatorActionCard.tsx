@@ -227,38 +227,40 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
       )}
 
       {expanded && (
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', boxSizing: 'border-box' }}>
           {/* VASP Info Header Box */}
           <div
             style={{
-              padding: '14px 16px',
+              padding: '12px 14px',
               backgroundColor: 'var(--bg-surface-low)',
               border: '1px solid var(--border-tactical)',
               borderRadius: '6px',
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))',
               gap: '12px',
+              width: '100%',
+              boxSizing: 'border-box',
             }}
           >
-            <div>
+            <div style={{ minWidth: 0 }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', display: 'block' }}>
                 VASP Entity
               </span>
-              <span style={{ fontFamily: 'var(--font-headline)', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+              <span style={{ fontFamily: 'var(--font-headline)', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', wordBreak: 'break-word' }}>
                 {activeExName}
               </span>
             </div>
 
-            <div>
+            <div style={{ minWidth: 0 }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', display: 'block' }}>
                 Legal Jurisdiction
               </span>
-              <span style={{ fontFamily: 'var(--font-headline)', fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+              <span style={{ fontFamily: 'var(--font-headline)', fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', wordBreak: 'break-word' }}>
                 {info?.jurisdiction || 'International / MLAT Cooperation'}
               </span>
             </div>
 
-            <div>
+            <div style={{ minWidth: 0 }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', display: 'block' }}>
                 Typical LEA Turnaround
               </span>
@@ -268,13 +270,13 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
             </div>
 
             {info?.leaEmail && (
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10.5px', color: 'var(--text-dim)', textTransform: 'uppercase', display: 'block' }}>
                   Direct LEA Email
                 </span>
                 <a
                   href={`mailto:${info.leaEmail}?subject=URGENT:%20Preservation%20Notice%20-%20Sec%2091%20CrPC%20-%20${walletAddress}`}
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--accent-cyan)', textDecoration: 'none' }}
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--accent-cyan)', textDecoration: 'none', wordBreak: 'break-all' }}
                 >
                   {info.leaEmail}
                 </a>
@@ -293,19 +295,21 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: '8px',
+                width: '100%',
+                boxSizing: 'border-box',
               }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--accent-cyan)', marginTop: '2px' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--accent-cyan)', marginTop: '2px', flexShrink: 0 }}>
                 info
               </span>
-              <span style={{ fontFamily: 'var(--font-body)', fontSize: '12.5px', color: 'var(--text-main)', lineHeight: '1.4' }}>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: '12.5px', color: 'var(--text-main)', lineHeight: '1.4', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                 <strong>VASP Guidance:</strong> {info.notes}
               </span>
             </div>
           )}
 
           {/* Step by Step Procedures */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
             <h4 style={{ fontFamily: 'var(--font-headline)', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
               Action Steps for Investigating Officer
             </h4>
@@ -315,12 +319,14 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
                 key={step.step}
                 style={{
                   display: 'flex',
-                  gap: '14px',
+                  gap: '12px',
                   alignItems: 'flex-start',
                   padding: '12px 14px',
                   backgroundColor: 'var(--bg-surface-low)',
                   border: '1px solid var(--border-tactical)',
                   borderRadius: '6px',
+                  width: '100%',
+                  boxSizing: 'border-box',
                 }}
               >
                 <div
@@ -343,9 +349,9 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
                   {step.step}
                 </div>
 
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ fontFamily: 'var(--font-headline)', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+                    <span style={{ fontFamily: 'var(--font-headline)', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', wordBreak: 'break-word' }}>
                       {step.action}
                     </span>
                     {step.url && (
@@ -365,14 +371,15 @@ export const InvestigatorActionCard: React.FC<InvestigatorActionCardProps> = ({
                           backgroundColor: 'var(--bg-surface)',
                           border: '1px solid var(--border-tactical)',
                           borderRadius: '3px',
+                          wordBreak: 'break-all',
                         }}
                       >
                         <span>{step.urlLabel || 'Open Portal'}</span>
-                        <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>open_in_new</span>
+                        <span className="material-symbols-outlined" style={{ fontSize: '12px', flexShrink: 0 }}>open_in_new</span>
                       </a>
                     )}
                   </div>
-                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0', lineHeight: '1.4', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                     {step.detail}
                   </p>
                 </div>

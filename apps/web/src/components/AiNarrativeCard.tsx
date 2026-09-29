@@ -87,13 +87,13 @@ export const AiNarrativeCard: React.FC<AiNarrativeCardProps> = ({
           gap: '0.5rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-          <Sparkles size={14} style={{ color: 'var(--accent-cyan-bright)' }} />
-          <span className="font-label-caps" style={{ color: 'var(--text-main)', letterSpacing: '0.05em' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0, flex: '1 1 auto' }}>
+          <Sparkles size={14} style={{ color: 'var(--accent-cyan-bright)', flexShrink: 0 }} />
+          <span className="font-label-caps" style={{ color: 'var(--text-main)', letterSpacing: '0.05em', wordBreak: 'break-word' }}>
             AI INVESTIGATIVE CASE NARRATIVE (COURT & FIR ANNEXURE)
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <span className="badge-tactical badge-tactical-cyan" style={{ fontSize: '0.65rem' }}>
             {currentProvider.toUpperCase()}
           </span>
@@ -120,7 +120,7 @@ export const AiNarrativeCard: React.FC<AiNarrativeCardProps> = ({
       </div>
 
       {/* Body */}
-      <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+      <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.85rem', width: '100%', boxSizing: 'border-box' }}>
         {paragraphs.length > 0 ? (
           paragraphs.map((para, idx) => (
             <p
@@ -135,6 +135,9 @@ export const AiNarrativeCard: React.FC<AiNarrativeCardProps> = ({
                 borderRadius: '3px',
                 border: '1px solid var(--border-tactical)',
                 borderLeft: '3px solid var(--accent-cyan-bright)',
+                wordBreak: 'break-word',
+                overflowWrap: 'anywhere',
+                boxSizing: 'border-box',
               }}
             >
               {para}

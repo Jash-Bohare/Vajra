@@ -56,11 +56,13 @@ export const GraphMetricsCard: React.FC<GraphMetricsCardProps> = ({ metrics, roo
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.5rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-          <Network size={14} style={{ color: 'var(--accent-cyan-bright)' }} />
-          <span className="font-label-caps" style={{ color: 'var(--text-main)', letterSpacing: '0.05em' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0, flex: '1 1 auto' }}>
+          <Network size={14} style={{ color: 'var(--accent-cyan-bright)', flexShrink: 0 }} />
+          <span className="font-label-caps" style={{ color: 'var(--text-main)', letterSpacing: '0.05em', wordBreak: 'break-word' }}>
             GRAPH TOPOLOGICAL ANALYTICS (NETWORKX)
           </span>
         </div>
@@ -71,31 +73,36 @@ export const GraphMetricsCard: React.FC<GraphMetricsCardProps> = ({ metrics, roo
             borderColor: topo.color,
             fontSize: '0.68rem',
             fontWeight: 700,
+            flexShrink: 0,
           }}
         >
           {topo.label}
         </span>
       </div>
 
-      <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+      <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.9rem', width: '100%', boxSizing: 'border-box' }}>
         {/* Metric Grid */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '0.65rem',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 95px), 1fr))',
+            gap: '0.5rem',
+            width: '100%',
+            boxSizing: 'border-box',
           }}
         >
           {/* Node / Edge Count */}
           <div
             style={{
               backgroundColor: 'var(--bg-surface-low)',
-              padding: '0.6rem 0.75rem',
+              padding: '0.6rem 0.65rem',
               borderRadius: '3px',
               border: '1px solid var(--border-tactical)',
+              minWidth: 0,
+              boxSizing: 'border-box',
             }}
           >
-            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.65rem', display: 'block' }}>
+            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.62rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               NODES / EDGES
             </span>
             <div className="font-headline-sm" style={{ color: 'var(--text-main)', marginTop: '0.2rem' }}>
@@ -110,15 +117,17 @@ export const GraphMetricsCard: React.FC<GraphMetricsCardProps> = ({ metrics, roo
           <div
             style={{
               backgroundColor: 'var(--bg-surface-low)',
-              padding: '0.6rem 0.75rem',
+              padding: '0.6rem 0.65rem',
               borderRadius: '3px',
               border: '1px solid var(--border-tactical)',
+              minWidth: 0,
+              boxSizing: 'border-box',
             }}
           >
-            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.65rem', display: 'block' }}>
+            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.62rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               MAX FAN-OUT / IN
             </span>
-            <div className="font-headline-sm" style={{ color: 'var(--text-main)', marginTop: '0.2rem' }}>
+            <div className="font-headline-sm" style={{ color: 'var(--text-main)', marginTop: '0.2rem', fontSize: '0.95rem' }}>
               {maxFanOut}{' '}
               <span className="font-mono-data-xs" style={{ color: 'var(--text-muted)' }}>
                 out / {maxFanIn} in
@@ -130,12 +139,14 @@ export const GraphMetricsCard: React.FC<GraphMetricsCardProps> = ({ metrics, roo
           <div
             style={{
               backgroundColor: 'var(--bg-surface-low)',
-              padding: '0.6rem 0.75rem',
+              padding: '0.6rem 0.65rem',
               borderRadius: '3px',
               border: '1px solid var(--border-tactical)',
+              minWidth: 0,
+              boxSizing: 'border-box',
             }}
           >
-            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.65rem', display: 'block' }}>
+            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.62rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               FASTEST HOP SPEED
             </span>
             <div className="font-headline-sm" style={{ color: minHopVelocity < 120 ? 'var(--danger-crimson)' : 'var(--text-main)', marginTop: '0.2rem' }}>
@@ -147,12 +158,14 @@ export const GraphMetricsCard: React.FC<GraphMetricsCardProps> = ({ metrics, roo
           <div
             style={{
               backgroundColor: 'var(--bg-surface-low)',
-              padding: '0.6rem 0.75rem',
+              padding: '0.6rem 0.65rem',
               borderRadius: '3px',
               border: '1px solid var(--border-tactical)',
+              minWidth: 0,
+              boxSizing: 'border-box',
             }}
           >
-            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.65rem', display: 'block' }}>
+            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.62rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               CLUSTERING COEFF
             </span>
             <div className="font-mono-data-sm" style={{ color: 'var(--accent-cyan-bright)', marginTop: '0.2rem', fontWeight: 700 }}>
@@ -164,12 +177,14 @@ export const GraphMetricsCard: React.FC<GraphMetricsCardProps> = ({ metrics, roo
           <div
             style={{
               backgroundColor: 'var(--bg-surface-low)',
-              padding: '0.6rem 0.75rem',
+              padding: '0.6rem 0.65rem',
               borderRadius: '3px',
               border: '1px solid var(--border-tactical)',
+              minWidth: 0,
+              boxSizing: 'border-box',
             }}
           >
-            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.65rem', display: 'block' }}>
+            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.62rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               AVG BETWEENNESS
             </span>
             <div className="font-mono-data-sm" style={{ color: 'var(--accent-cyan-bright)', marginTop: '0.2rem', fontWeight: 700 }}>
@@ -181,12 +196,14 @@ export const GraphMetricsCard: React.FC<GraphMetricsCardProps> = ({ metrics, roo
           <div
             style={{
               backgroundColor: 'var(--bg-surface-low)',
-              padding: '0.6rem 0.75rem',
+              padding: '0.6rem 0.65rem',
               borderRadius: '3px',
               border: '1px solid var(--border-tactical)',
+              minWidth: 0,
+              boxSizing: 'border-box',
             }}
           >
-            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.65rem', display: 'block' }}>
+            <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.62rem', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               VALUE DECAY (PEEL)
             </span>
             <div className="font-mono-data-sm" style={{ color: valueDecay > 0.2 ? 'var(--danger-crimson)' : 'var(--text-main)', marginTop: '0.2rem', fontWeight: 700 }}>

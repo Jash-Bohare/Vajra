@@ -76,22 +76,24 @@ export const MLRiskScoreCard: React.FC<MLRiskScoreCardProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.5rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-          <Cpu size={14} style={{ color: 'var(--accent-cyan-bright)' }} />
-          <span className="font-label-caps" style={{ color: 'var(--text-main)', letterSpacing: '0.05em' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0, flex: '1 1 auto' }}>
+          <Cpu size={14} style={{ color: 'var(--accent-cyan-bright)', flexShrink: 0 }} />
+          <span className="font-label-caps" style={{ color: 'var(--text-main)', letterSpacing: '0.05em', wordBreak: 'break-word' }}>
             ML RISK CLASSIFIER & SHAP EXPLAINABILITY
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
           <span className="badge-tactical badge-tactical-cyan">
             {mlFallbackUsed ? 'FALLBACK: RULES' : 'XGBOOST v1'}
           </span>
         </div>
       </div>
 
-      <div style={{ padding: '0 1rem 1rem 1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div style={{ padding: '0 1rem 1rem 1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', width: '100%', boxSizing: 'border-box' }}>
         {/* Main Gauge & Score Block */}
         <div
           style={{
@@ -104,10 +106,12 @@ export const MLRiskScoreCard: React.FC<MLRiskScoreCardProps> = ({
             border: '1px solid var(--border-tactical)',
             flexWrap: 'wrap',
             gap: '1rem',
+            width: '100%',
+            boxSizing: 'border-box',
           }}
         >
           {/* Circular Score Gauge */}
-          <div style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <svg width="120" height="120" viewBox="0 0 120 120" style={{ transform: 'rotate(-135deg)' }}>
               {/* Background track */}
               <circle
@@ -147,12 +151,12 @@ export const MLRiskScoreCard: React.FC<MLRiskScoreCardProps> = ({
           </div>
 
           {/* Model Verdict & Meta Metrics */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '160px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '140px', flex: '1 1 auto' }}>
             <div>
               <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>
                 PREDICTED THREAT TIER
               </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem', flexWrap: 'wrap' }}>
                 <span
                   style={{
                     backgroundColor: colors.bg,
@@ -177,7 +181,7 @@ export const MLRiskScoreCard: React.FC<MLRiskScoreCardProps> = ({
               <span className="font-label-caps" style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>
                 CONFIDENCE & ENGINE
               </span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.15rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.15rem', flexWrap: 'wrap' }}>
                 <span className="badge-tactical badge-tactical-muted" style={{ textTransform: 'uppercase' }}>
                   CONFIDENCE: {confidence}
                 </span>
@@ -190,21 +194,21 @@ export const MLRiskScoreCard: React.FC<MLRiskScoreCardProps> = ({
         </div>
 
         {/* SHAP Feature Importance Decomposition */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <BarChart3 size={13} style={{ color: 'var(--accent-cyan-bright)' }} />
-              <span className="font-label-caps" style={{ color: 'var(--text-main)', fontSize: '0.7rem' }}>
+        <div style={{ width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', minWidth: 0 }}>
+              <BarChart3 size={13} style={{ color: 'var(--accent-cyan-bright)', flexShrink: 0 }} />
+              <span className="font-label-caps" style={{ color: 'var(--text-main)', fontSize: '0.7rem', wordBreak: 'break-word' }}>
                 SHAP IMPACT BREAKDOWN (TOP DECISION SIGNALS)
               </span>
             </div>
-            <span className="font-mono-data-xs" style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>
+            <span className="font-mono-data-xs" style={{ color: 'var(--text-dim)', fontSize: '0.65rem', flexShrink: 0 }}>
               Court-Admissible Attribution
             </span>
           </div>
 
           {featureImportance && featureImportance.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', width: '100%' }}>
               {featureImportance.slice(0, 5).map((item, idx) => {
                 const numShap = typeof item.shapValue === 'number' ? item.shapValue : (typeof (item as any).shap_value === 'number' ? (item as any).shap_value : 0);
                 const rawVal = item.rawValue !== undefined ? item.rawValue : ((item as any).raw_value !== undefined ? (item as any).raw_value : (item as any).value ?? 0);
@@ -219,19 +223,21 @@ export const MLRiskScoreCard: React.FC<MLRiskScoreCardProps> = ({
                     key={(item.feature || 'feat') + '_' + idx}
                     style={{
                       backgroundColor: 'var(--bg-surface-low)',
-                      padding: '0.4rem 0.6rem',
+                      padding: '0.45rem 0.6rem',
                       borderRadius: '3px',
                       border: '1px solid var(--border-tactical)',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '0.25rem',
+                      width: '100%',
+                      boxSizing: 'border-box',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className="font-mono-data-xs" style={{ color: 'var(--text-main)', fontWeight: 600 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                      <span className="font-mono-data-xs" style={{ color: 'var(--text-main)', fontWeight: 600, wordBreak: 'break-word', minWidth: '120px', flex: '1 1 auto' }}>
                         {(item.feature || '').replace(/_/g, ' ')}
                       </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
                         <span className="font-mono-data-xs" style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>
                           val: {formattedRaw}
                         </span>
@@ -247,7 +253,6 @@ export const MLRiskScoreCard: React.FC<MLRiskScoreCardProps> = ({
                         </span>
                       </div>
                     </div>
-
 
                     {/* Horizontal Visual Impact Bar */}
                     <div

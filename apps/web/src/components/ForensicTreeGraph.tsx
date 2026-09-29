@@ -1463,6 +1463,143 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
     };
   }, []);
 
+  // 7. Native Touch Drag & Pinch-to-Zoom Gesture Handlers for Mobile Devices
+  const touchInfoRef = useRef<{
+    mode: 'pan' | 'pinch';
+    startX: number;
+    startY: number;
+    startPanX: number;
+    startPanY: number;
+    startDist: number;
+    startZoom: number;
+    centerX: number;
+    centerY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        didCanvasDragRef.current = false;
+        touchInfoRef.current = {
+          mode: 'pan',
+          startX: t.clientX,
+          startY: t.clientY,
+          startPanX: pan.x,
+          startPanY: pan.y,
+          startDist: 0,
+          startZoom: zoom,
+          centerX: 0,
+          centerY: 0,
+        };
+      } else if (e.touches.length === 2) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const rect = container.getBoundingClientRect();
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        const centerX = (t1.clientX + t2.clientX) / 2 - rect.left;
+        const centerY = (t1.clientY + t2.clientY) / 2 - rect.top;
+        touchInfoRef.current = {
+          mode: 'pinch',
+          startX: 0,
+          startY: 0,
+          startPanX: pan.x,
+          startPanY: pan.y,
+          startDist: dist,
+          startZoom: zoom,
+          centerX,
+          centerY,
+        };
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchInfoRef.current) return;
+      e.preventDefault();
+
+      if (touchInfoRef.current.mode === 'pan' && e.touches.length === 1) {
+        const t = e.touches[0];
+        const dx = t.clientX - touchInfoRef.current.startX;
+        const dy = t.clientY - touchInfoRef.current.startY;
+        if (Math.hypot(dx, dy) > 3) {
+          didCanvasDragRef.current = true;
+        }
+        setPan({
+          x: touchInfoRef.current.startPanX + dx,
+          y: touchInfoRef.current.startPanY + dy,
+        });
+      } else if (e.touches.length === 2) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const rect = container.getBoundingClientRect();
+        const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+        if (touchInfoRef.current.mode !== 'pinch' || touchInfoRef.current.startDist === 0) {
+          const centerX = (t1.clientX + t2.clientX) / 2 - rect.left;
+          const centerY = (t1.clientY + t2.clientY) / 2 - rect.top;
+          touchInfoRef.current = {
+            mode: 'pinch',
+            startX: 0,
+            startY: 0,
+            startPanX: pan.x,
+            startPanY: pan.y,
+            startDist: currentDist,
+            startZoom: zoom,
+            centerX,
+            centerY,
+          };
+          return;
+        }
+
+        const scale = currentDist / touchInfoRef.current.startDist;
+        const nextZoom = Math.min(2.5, Math.max(0.35, touchInfoRef.current.startZoom * scale));
+        const cX = touchInfoRef.current.centerX;
+        const cY = touchInfoRef.current.centerY;
+        const ratio = nextZoom / touchInfoRef.current.startZoom;
+
+        setZoom(nextZoom);
+        setPan({
+          x: cX - (cX - touchInfoRef.current.startPanX) * ratio,
+          y: cY - (cY - touchInfoRef.current.startPanY) * ratio,
+        });
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) {
+        touchInfoRef.current = null;
+      } else if (e.touches.length === 1) {
+        const t = e.touches[0];
+        touchInfoRef.current = {
+          mode: 'pan',
+          startX: t.clientX,
+          startY: t.clientY,
+          startPanX: pan.x,
+          startPanY: pan.y,
+          startDist: 0,
+          startZoom: zoom,
+          centerX: 0,
+          centerY: 0,
+        };
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [pan, zoom]);
+
   const handleStepZoom = (factor: number) => {
     const container = containerRef.current;
     const centerX = (container?.clientWidth || 700) / 2;
@@ -1512,6 +1649,7 @@ export const ForensicTreeGraph: React.FC<ForensicTreeGraphProps> = ({
         overflow: 'hidden',
         cursor: isDragging ? 'grabbing' : 'default',
         userSelect: 'none',
+        touchAction: 'none',
         transition: 'background-color 0.2s ease',
       }}
       onMouseDown={handleCanvasMouseDown}

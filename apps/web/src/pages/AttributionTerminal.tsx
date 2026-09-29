@@ -533,7 +533,7 @@ export const AttributionTerminal: React.FC = () => {
       </div>
 
       {/* 2. Compact 4-Card Forensic KPI Metric Strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '10px' }}>
         {/* Metric 1: Threat / Risk Level (First & Specially Highlighted) */}
         <div
           style={{
@@ -860,8 +860,8 @@ export const AttributionTerminal: React.FC = () => {
 
           {/* TAB: AI/ML Threat Intelligence & SHAP Explainer */}
           {(activeTab === 'ai-intel' || activeTab === 'all') && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', boxSizing: 'border-box' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '14px', width: '100%', boxSizing: 'border-box' }}>
                 <MLRiskScoreCard
                   score={riskScore}
                   mlScore={data.mlScore}
