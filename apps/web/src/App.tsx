@@ -7,6 +7,7 @@ import { HistoryPage } from './pages/HistoryPage';
 import { LandingPage } from './pages/LandingPage';
 import { TacticalHeader } from './components/layout/TacticalHeader';
 import { TacticalSidebar } from './components/layout/TacticalSidebar';
+import { TacticalBottomNav } from './components/layout/TacticalBottomNav';
 
 const AppLayout: React.FC = () => {
   const { theme } = useTheme();
@@ -67,6 +68,8 @@ const AppLayout: React.FC = () => {
           </Routes>
         </main>
       </div>
+
+      <TacticalBottomNav />
     </div>
   );
 };

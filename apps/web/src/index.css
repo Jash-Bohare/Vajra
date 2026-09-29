@@ -425,10 +425,31 @@ body {
 /* RESPONSIVE LAYOUT & MOBILE ADAPTATIONS                     */
 /* ========================================================== */
 
+/* Desktop defaults */
+.tactical-mobile-menu-btn {
+  display: none !important;
+}
+
+.tactical-bottom-nav {
+  display: none !important;
+}
+
+.app-sidebar-responsive {
+  transform: translateX(0) !important;
+}
+
 @media (max-width: 1024px) {
+  .tactical-mobile-menu-btn {
+    display: flex !important;
+  }
+
+  .tactical-bottom-nav {
+    display: flex !important;
+  }
+
   .app-main-layout {
     margin-left: 0 !important;
-    padding: 12px 16px !important;
+    padding: 12px 16px 80px 16px !important;
   }
   
   .app-sidebar-responsive {
@@ -437,13 +458,19 @@ body {
     top: 64px !important;
     bottom: 0 !important;
     z-index: 50 !important;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35) !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.45) !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  }
+
+  .app-sidebar-responsive.open {
+    transform: translateX(0) !important;
   }
 }
 
 @media (max-width: 768px) {
   .app-main-layout {
-    padding: 10px 12px !important;
+    padding: 10px 12px 80px 12px !important;
   }
 
   .tactical-header-responsive {

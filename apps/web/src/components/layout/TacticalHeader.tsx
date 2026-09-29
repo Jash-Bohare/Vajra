@@ -38,6 +38,7 @@ export const TacticalHeader: React.FC<TacticalHeaderProps> = ({
         {onToggleMobileSidebar && (
           <button
             type="button"
+            className="tactical-mobile-menu-btn"
             onClick={onToggleMobileSidebar}
             aria-label="Toggle Navigation Menu"
             style={{
