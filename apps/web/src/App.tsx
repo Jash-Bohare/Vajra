@@ -11,6 +11,12 @@ import { TacticalSidebar } from './components/layout/TacticalSidebar';
 const AppLayout: React.FC = () => {
   const { theme } = useTheme();
   const location = useLocation();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState(false);
+
+  // Close mobile sidebar on route change
+  React.useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname]);
 
   // Root route renders the Sovereign Landing & Command Portal
   if (location.pathname === '/') {
@@ -26,12 +32,19 @@ const AppLayout: React.FC = () => {
         transition: 'background-color 0.2s ease, color 0.2s ease',
       }}
     >
-      <TacticalHeader />
+      <TacticalHeader
+        onToggleMobileSidebar={() => setMobileSidebarOpen((prev) => !prev)}
+        isMobileSidebarOpen={mobileSidebarOpen}
+      />
 
       <div style={{ display: 'flex', paddingTop: '64px', minHeight: 'calc(100vh - 64px)' }}>
-        <TacticalSidebar />
+        <TacticalSidebar
+          isOpenMobile={mobileSidebarOpen}
+          onCloseMobile={() => setMobileSidebarOpen(false)}
+        />
 
         <main
+          className="app-main-layout"
           style={{
             flex: 1,
             marginLeft: '256px',

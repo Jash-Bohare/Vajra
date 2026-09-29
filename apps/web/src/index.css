@@ -420,3 +420,54 @@ body {
 .animate-ping-slow {
   animation: live-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
+
+/* ========================================================== */
+/* RESPONSIVE LAYOUT & MOBILE ADAPTATIONS                     */
+/* ========================================================== */
+
+@media (max-width: 1024px) {
+  .app-main-layout {
+    margin-left: 0 !important;
+    padding: 12px 16px !important;
+  }
+  
+  .app-sidebar-responsive {
+    position: fixed !important;
+    left: 0 !important;
+    top: 64px !important;
+    bottom: 0 !important;
+    z-index: 50 !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-main-layout {
+    padding: 10px 12px !important;
+  }
+
+  .tactical-header-responsive {
+    padding: 0 12px !important;
+  }
+
+  .brand-tagline-mobile {
+    display: none !important;
+  }
+
+  /* Responsive Grid Adjustments */
+  .grid-responsive-cards {
+    grid-template-columns: 1fr !important;
+  }
+
+  .table-scroll-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Compact button text */
+  .btn-text-mobile-compact {
+    font-size: 11px !important;
+    padding: 6px 10px !important;
+  }
+}
+

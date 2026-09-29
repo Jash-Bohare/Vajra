@@ -1,0 +1,8 @@
+{
+  "framework": "vite",
+  "buildCommand": "npm run build --workspace=packages/types && npm run build --workspace=packages/config && npm run build --workspace=apps/web",
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

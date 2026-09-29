@@ -2,12 +2,21 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
 
-export const TacticalHeader: React.FC = () => {
+interface TacticalHeaderProps {
+  onToggleMobileSidebar?: () => void;
+  isMobileSidebarOpen?: boolean;
+}
+
+export const TacticalHeader: React.FC<TacticalHeaderProps> = ({
+  onToggleMobileSidebar,
+  isMobileSidebarOpen,
+}) => {
   const navigate = useNavigate();
   const { theme } = useTheme();
 
   return (
     <header
+      className="tactical-header-responsive"
       style={{
         position: 'fixed',
         top: 0,
@@ -24,57 +33,85 @@ export const TacticalHeader: React.FC = () => {
         transition: 'background-color 0.2s ease, border-color 0.2s ease',
       }}
     >
-      {/* 1. Brand Logo, Name, Restricted Badge & Tagline */}
-      <div
-        onClick={() => navigate('/')}
-        style={{
-          cursor: 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '2px',
-          userSelect: 'none',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Mobile Hamburger Drawer Trigger */}
+        {onToggleMobileSidebar && (
+          <button
+            type="button"
+            onClick={onToggleMobileSidebar}
+            aria-label="Toggle Navigation Menu"
             style={{
-              fontFamily: 'var(--font-headline)',
-              fontWeight: 700,
-              fontSize: '17px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '36px',
+              height: '36px',
+              backgroundColor: isMobileSidebarOpen ? 'var(--bg-surface-high)' : 'var(--bg-surface-low)',
+              border: '1px solid var(--border-tactical)',
+              borderRadius: '4px',
               color: 'var(--text-main)',
-              letterSpacing: '-0.02em',
+              cursor: 'pointer',
             }}
           >
-            VAJRA
-          </span>
+            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+              {isMobileSidebarOpen ? 'close' : 'menu'}
+            </span>
+          </button>
+        )}
+
+        {/* 1. Brand Logo, Name, Restricted Badge & Tagline */}
+        <div
+          onClick={() => navigate('/')}
+          style={{
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+            userSelect: 'none',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span
+              style={{
+                fontFamily: 'var(--font-headline)',
+                fontWeight: 700,
+                fontSize: '17px',
+                color: 'var(--text-main)',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              VAJRA
+            </span>
+            <span
+              style={{
+                padding: '2px 7px',
+                backgroundColor: 'var(--bg-surface-low)',
+                border: '1px solid var(--border-tactical)',
+                borderRadius: '3px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                fontWeight: 700,
+                color: 'var(--accent-cyan)',
+                letterSpacing: '0.04em',
+              }}
+            >
+              GOVT LEA
+            </span>
+          </div>
           <span
+            className="brand-tagline-mobile"
             style={{
-              padding: '2px 7px',
-              backgroundColor: 'var(--bg-surface-low)',
-              border: '1px solid var(--border-tactical)',
-              borderRadius: '3px',
               fontFamily: 'var(--font-mono)',
-              fontSize: '10px',
-              fontWeight: 700,
-              color: 'var(--accent-cyan)',
+              fontSize: '10.5px',
+              fontWeight: 600,
+              color: 'var(--text-dim)',
+              textTransform: 'uppercase',
               letterSpacing: '0.04em',
             }}
           >
-            GOVT LEA RESTRICTED
+            Cyber Forensic Suite
           </span>
         </div>
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '10.5px',
-            fontWeight: 600,
-            color: 'var(--text-dim)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-          }}
-        >
-          Cyber Forensic Crime Intelligence Suite
-        </span>
       </div>
 
       {/* 2. Investigator ID Profile */}
@@ -107,7 +144,7 @@ export const TacticalHeader: React.FC = () => {
               lineHeight: '1.2',
             }}
           >
-            NCB-DELHI CYBER
+            NCB-DELHI
           </span>
         </div>
         <div

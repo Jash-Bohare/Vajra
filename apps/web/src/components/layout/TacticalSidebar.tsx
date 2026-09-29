@@ -2,7 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
 
-export const TacticalSidebar: React.FC = () => {
+interface TacticalSidebarProps {
+  isOpenMobile?: boolean;
+  onCloseMobile?: () => void;
+}
+
+export const TacticalSidebar: React.FC<TacticalSidebarProps> = ({
+  isOpenMobile = false,
+  onCloseMobile,
+}) => {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const [utcTime, setUtcTime] = useState('');
@@ -56,23 +64,40 @@ export const TacticalSidebar: React.FC = () => {
   ];
 
   return (
-    <aside
-      style={{
-        position: 'fixed',
-        left: 0,
-        top: '64px',
-        bottom: 0,
-        width: '256px',
-        backgroundColor: 'var(--bg-surface)',
-        borderRight: '1px solid var(--border-tactical)',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        padding: '16px 0',
-        zIndex: 40,
-        transition: 'background-color 0.2s ease, border-color 0.2s ease',
-      }}
-    >
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {isOpenMobile && (
+        <div
+          onClick={onCloseMobile}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            top: '64px',
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 45,
+          }}
+        />
+      )}
+
+      <aside
+        className={`app-sidebar-responsive ${isOpenMobile ? 'open' : ''}`}
+        style={{
+          position: 'fixed',
+          left: 0,
+          top: '64px',
+          bottom: 0,
+          width: '256px',
+          backgroundColor: 'var(--bg-surface)',
+          borderRight: '1px solid var(--border-tactical)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          padding: '16px 0',
+          zIndex: 46,
+          transition: 'transform 0.25s ease, background-color 0.2s ease, border-color 0.2s ease',
+        }}
+      >
       {/* 1. Navigation Section */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <div style={{ padding: '0 16px 4px 16px' }}>
@@ -278,5 +303,6 @@ export const TacticalSidebar: React.FC = () => {
         </div>
       </div>
     </aside>
+    </>
   );
 };
