@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@rt-cfas/types": "*",
     "cytoscape": "^3.34.2",
     "cytoscape-dagre": "^4.0.0",
     "jspdf": "^4.2.1",
