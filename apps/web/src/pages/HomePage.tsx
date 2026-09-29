@@ -273,16 +273,25 @@ export const HomePage: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to execute forensic investigation.');
+        let errMsg = 'Failed to execute forensic investigation.';
+        try {
+          const errData = await res.json();
+          errMsg = errData.error || errMsg;
+        } catch {
+          errMsg = `Backend API server unreachable (HTTP ${res.status}). Please make sure 'npm run dev:api' is running.`;
+        }
+        throw new Error(errMsg);
       }
+
+      const data = await res.json();
 
       // Instant transition if cached snapshot, or brief 600ms tactical transition for fresh scan
       const delay = data.isCached ? 150 : 600;
       setTimeout(() => {
         navigate(`/investigations/${data.investigationId}`);
       }, delay);
+
     } catch (err: any) {
       console.error('[HomePage] Trace dispatch error:', err);
       setError(err.message || 'Error executing forensic trace. Please verify backend services.');

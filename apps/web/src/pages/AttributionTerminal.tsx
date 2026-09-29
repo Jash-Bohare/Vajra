@@ -8,6 +8,10 @@ import { InvestigatorActionCard } from '../components/InvestigatorActionCard';
 import { TokenBadge } from '../components/TokenBadge';
 import { useTheme } from '../context/ThemeContext';
 import { extractDiscoveredVasps, DiscoveredVasp, normalizeExchangeName } from '../utils/vaspUtils';
+import { MLRiskScoreCard } from '../components/MLRiskScoreCard';
+import { GraphMetricsCard } from '../components/GraphMetricsCard';
+import { AiNarrativeCard } from '../components/AiNarrativeCard';
+
 
 export const AttributionTerminal: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -23,7 +27,11 @@ export const AttributionTerminal: React.FC = () => {
   const [layoutMode, setLayoutMode] = useState<'dag' | 'tree'>('dag');
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'branches' | 'ledger' | 'playbook' | 'all'>('branches');
+  const [activeTab, setActiveTab] = useState<'branches' | 'ai-intel' | 'ledger' | 'playbook' | 'all'>('branches');
+
+
+
+
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -55,8 +63,18 @@ export const AttributionTerminal: React.FC = () => {
       }
 
       const syncResult = await res.json();
-      if (syncResult.investigationId) {
-        navigate(`/investigations/${syncResult.investigationId}`);
+      const nextId = syncResult.investigationId || id;
+      if (nextId) {
+        if (nextId !== id) {
+          navigate(`/investigations/${nextId}`);
+        } else {
+          // Re-fetch current investigation data to refresh state
+          const refreshed = await fetch(`/api/investigations/${nextId}`);
+          if (refreshed.ok) {
+            const payload = await refreshed.json();
+            setInvestigationData(payload.data || payload);
+          }
+        }
       }
     } catch (err: any) {
       console.error('[AttributionTerminal] Sync Live On-Chain Error:', err);
@@ -205,8 +223,13 @@ export const AttributionTerminal: React.FC = () => {
   const trappedValuationUsd = valuationMetrics.valuationUsd;
   const finalHop = rawHops.length > 0 ? rawHops[rawHops.length - 1] : null;
 
-  const riskScore = data?.riskScore || (data?.riskLevel === 'high' ? 94 : data?.riskLevel === 'medium' ? 58 : 22);
-  const riskLevel = data?.riskLevel || (riskScore >= 80 ? 'high' : riskScore >= 50 ? 'medium' : 'low');
+  const riskScore = data?.mlScore !== undefined
+    ? Math.round(data.mlScore)
+    : (data?.riskScore !== undefined
+      ? Math.round(data.riskScore)
+      : (data?.riskLevel === 'high' ? 94 : data?.riskLevel === 'medium' ? 58 : 22));
+  const riskLevel = data?.riskLevel || (riskScore >= 75 ? 'high' : riskScore >= 45 ? 'medium' : 'low');
+
 
   const evidenceMerkleHash = useMemo(() => {
     if (!data?.id) return 'STANDBY-AUTH';
@@ -725,6 +748,29 @@ export const AttributionTerminal: React.FC = () => {
 
             <button
               type="button"
+              onClick={() => setActiveTab('ai-intel')}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: activeTab === 'ai-intel' ? 'var(--accent-cyan)' : 'transparent',
+                color: activeTab === 'ai-intel' ? '#ffffff' : 'var(--text-main)',
+                border: `1px solid ${activeTab === 'ai-intel' ? 'var(--accent-cyan)' : 'var(--border-tactical)'}`,
+                borderRadius: '4px',
+                fontFamily: 'var(--font-headline)',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>psychology</span>
+              <span>AI/ML Threat Intelligence</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveTab('ledger')}
               style={{
                 padding: '6px 12px',
@@ -745,6 +791,7 @@ export const AttributionTerminal: React.FC = () => {
               <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>table_chart</span>
               <span>Hop Ledger ({rawHops.length})</span>
             </button>
+
 
             {isExchange && (
               <button
@@ -811,6 +858,44 @@ export const AttributionTerminal: React.FC = () => {
               }}
             />
           )}
+
+          {/* TAB: AI/ML Threat Intelligence & SHAP Explainer */}
+          {(activeTab === 'ai-intel' || activeTab === 'all') && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px' }}>
+                <MLRiskScoreCard
+                  score={riskScore}
+                  mlScore={data.mlScore}
+                  fraudProbability={data.fraudProbability}
+                  riskLevel={riskLevel}
+                  confidence={data.confidence}
+                  featureImportance={data.featureImportance}
+                  mlModelVersion={data.mlModelVersion}
+                  mlFallbackUsed={data.mlFallbackUsed}
+                />
+                {data.graphMetrics && (
+                  <GraphMetricsCard
+                    metrics={data.graphMetrics}
+                    rootAddress={data.walletAddress}
+                  />
+                )}
+              </div>
+
+              <AiNarrativeCard
+                narrative={data.aiNarrative}
+                generatedBy={data.narrativeGeneratedBy || 'template'}
+                investigationData={data}
+                onNarrativeUpdated={(newNarrative, provider) => {
+                  setInvestigationData((prev: any) => ({
+                    ...prev,
+                    aiNarrative: newNarrative,
+                    narrativeGeneratedBy: provider,
+                  }));
+                }}
+              />
+            </div>
+          )}
+
 
           {/* TAB 2: Hop Ledger Table */}
           {(activeTab === 'ledger' || activeTab === 'all') && (

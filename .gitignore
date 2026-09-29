@@ -13,6 +13,8 @@ build/
 
 # Environment and secrets
 .env
+.env.*
+!.env.example
 .env.local
 *.log
 
@@ -20,4 +22,5 @@ build/
 .DS_Store
 .vscode/
 .idea/
+project_overview.md
 *.tsbuildinfo

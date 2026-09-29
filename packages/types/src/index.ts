@@ -146,6 +146,15 @@ export interface Investigation {
   riskReason?: string;
   riskScore?: number;
   riskIndicators?: string[];
+  graphMetrics?: GraphMetrics;
+  mlScore?: number;
+  fraudProbability?: number;
+  confidence?: 'high' | 'medium' | 'low';
+  featureImportance?: FeatureImportanceItem[];
+  mlModelVersion?: string;
+  mlFallbackUsed?: boolean;
+  aiNarrative?: string;
+  narrativeGeneratedBy?: string;
   assetsDetected?: AssetType[];
   targetAsset?: AssetType;
   victimTxHash?: string;
@@ -170,6 +179,37 @@ export interface KnownExchangeAddress {
   addedAt: string;
 }
 
+/** Phase E3: Graph Topology Metrics from NetworkX */
+export interface GraphMetrics {
+  nodeCount: number;
+  edgeCount: number;
+  maxDepth: number;
+  maxFanOutDegree: number;
+  maxFanInDegree: number;
+  avgOutDegree: number;
+  fanOutRatio: number;
+  isLinearChain: boolean;
+  isStarTopology: boolean;
+  isHourglassTopology: boolean;
+  isClusterTopology: boolean;
+  avgHopVelocitySec: number;
+  minHopVelocitySec: number;
+  maxHopVelocitySec: number;
+  maxDegreeCentrality: number;
+  avgBetweennessCentrality: number;
+  clusteringCoefficient: number;
+  totalUsdTransacted: number;
+  valueDecayRatio: number;
+}
+
+/** Phase E3: SHAP feature importance entry */
+export interface FeatureImportanceItem {
+  feature: string;
+  shapValue: number;
+  direction: 'increases_risk' | 'reduces_risk';
+  rawValue: number;
+}
+
 /**
  * Feature Extraction Vector (Doc 03 Section 13)
  */
@@ -183,7 +223,7 @@ export interface TraceFeatures {
 }
 
 /**
- * Risk Scoring Result Schema (Doc 03 Section 16 & Spec 08)
+ * Risk Scoring Result Schema (Doc 03 Section 16 & Spec 08 & Spec 10)
  */
 export interface RiskResult {
   riskLevel: RiskLevel;
@@ -191,10 +231,19 @@ export interface RiskResult {
   indicators?: string[];
   reason: string;
   featuresUsed?: TraceFeatures;
+  graphMetrics?: GraphMetrics;
+  mlScore?: number;
+  fraudProbability?: number;
+  confidence?: 'high' | 'medium' | 'low';
+  featureImportance?: FeatureImportanceItem[];
+  mlModelVersion?: string;
+  mlFallbackUsed?: boolean;
+  aiNarrative?: string;
+  narrativeGeneratedBy?: string;
 }
 
 /**
- * API Request & Response Contracts (Doc 03 Section 6 & Spec 08)
+ * API Request & Response Contracts (Doc 03 Section 6 & Spec 08 & Spec 10)
  */
 export interface ScanAssetsRequest {
   walletAddress: string;
@@ -225,6 +274,11 @@ export interface RiskScoreRequest {
   traceHops: TraceHop[];
   terminalType?: TerminalType;
   destinationWalletPriorTxCount?: number;
+  totalFanOutNodes?: number;
+  totalFanInNodes?: number;
+  totalBranches?: number;
+  exchangeBranches?: number;
+  victimTxHash?: string;
 }
 
 export interface RiskScoreResponse {
@@ -233,6 +287,46 @@ export interface RiskScoreResponse {
   indicators?: string[];
   reason: string;
   featuresUsed?: TraceFeatures;
+  graphMetrics?: GraphMetrics;
+  mlScore?: number;
+  fraudProbability?: number;
+  confidence?: 'high' | 'medium' | 'low';
+  featureImportance?: FeatureImportanceItem[];
+  mlModelVersion?: string;
+  mlFallbackUsed?: boolean;
+  aiNarrative?: string;
+  narrativeGeneratedBy?: string;
+}
+
+export interface GraphMetricsRequest {
+  traceHops: TraceHop[];
+  rootAddress: string;
+  victimAmountUsd?: number;
+  isTreeMode?: boolean;
+}
+
+export interface GraphMetricsResponse {
+  rootAddress: string;
+  metrics: GraphMetrics;
+}
+
+export interface NarrativeRequest {
+  walletAddress: string;
+  traceHops: TraceHop[];
+  graphMetrics: Record<string, any>;
+  mlScore: number;
+  riskLevel: string;
+  topIndicators: string[];
+  victimTxHash?: string;
+  victimAmountUsd?: number;
+  targetAsset?: string;
+}
+
+export interface NarrativeResponse {
+  narrative: string;
+  generatedBy: string;
+  generatedAt: string;
+  wordCount: number;
 }
 
 export interface HealthResponse {
@@ -240,3 +334,4 @@ export interface HealthResponse {
   service: string;
   timestamp: string;
 }
+
